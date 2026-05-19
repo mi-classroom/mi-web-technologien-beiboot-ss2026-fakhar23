@@ -1,0 +1,289 @@
+.app-container {
+  padding: 20px;
+  max-width: 1200px;
+  margin: 0 auto;
+  font-family: sans-serif;
+}
+
+.loading-indicator {
+  font-size: 1.2rem;
+  font-weight: bold;
+  color: #007bff;
+  margin-bottom: 10px;
+}
+
+.workspace-layout {
+  display: flex;
+  gap: 20px;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  margin-bottom: 40px;
+}
+
+.feed-container {
+  position: relative;
+  background-color: #000;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.video-element {
+  position: absolute;
+  top: 0;
+  left: 0;
+  background-color: #000;
+  transform: scaleX(-1); /* Mirror view for natural user feedback */
+}
+
+.canvas-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 10;
+}
+
+.controls-row {
+  margin-top: 15px;
+  display: flex;
+  gap: 10px;
+}
+
+.btn {
+  padding: 10px 20px;
+  cursor: pointer;
+  border: none;
+  border-radius: 4px;
+  font-weight: bold;
+  color: white;
+  transition: background-color 0.2s ease;
+}
+
+.btn-primary {
+  background-color: #007bff;
+}
+
+.btn-primary:hover {
+  background-color: #0056b3;
+}
+
+.btn-danger {
+  background-color: #dc3545;
+}
+
+.btn-danger:hover {
+  background-color: #bd2130;
+}
+
+.btn-secondary {
+  padding: 4px 10px;
+  cursor: pointer;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  background-color: #f8f9fa;
+}
+
+.btn-secondary:hover {
+  background-color: #e2e6ea;
+}
+
+.live-monitor {
+  flex: 1;
+  min-width: 300px;
+  overflow: auto;
+  background-color: #f8f9fa;
+  padding: 15px;
+  border-radius: 8px;
+  border: 1px solid #dee2e6;
+}
+
+.code-block {
+  font-size: 12px;
+  margin: 0;
+  overflow: auto;
+}
+
+.history-section {
+  margin-top: 40px;
+}
+
+.history-title {
+  border-bottom: 1px solid #dee2e6;
+  padding-bottom: 10px;
+  margin-bottom: 20px;
+}
+
+.empty-history-text {
+  color: #6c757d;
+}
+
+.history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 30px;
+}
+
+.log-card {
+  display: flex;
+  gap: 20px;
+  flex-wrap: wrap;
+  background-color: #ffffff;
+  padding: 20px;
+  border-radius: 8px;
+  border: 1px solid #ced4da;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+}
+
+.log-preview-pane {
+  flex: 0 0 auto;
+}
+
+.log-preview-title {
+  margin: 0 0 10px 0;
+}
+
+.log-screenshot {
+  border: 1px solid #dee2e6;
+  border-radius: 4px;
+  display: block;
+}
+
+.log-data-pane {
+  flex: 1;
+  min-width: 300px;
+}
+
+.log-data-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.log-data-title {
+  margin: 0;
+}
+
+.log-data-block {
+  font-size: 12px;
+  overflow: auto;
+  margin: 0;
+  background-color: #f1f3f5;
+  padding: 10px;
+  border-radius: 4px;
+  border: 1px solid #e9ecef;
+}
+
+/* --- Parameter Controls Panel --- */
+.controls-panel {
+  display: flex;
+  gap: 20px;
+  align-items: center;
+  margin-bottom: 15px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid #dee2e6;
+}
+
+.control-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: bold;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.control-select {
+  padding: 3px 8px;
+  border-radius: 4px;
+  border: 1px solid #ccc;
+  background: #fff;
+  cursor: pointer;
+}
+
+/* --- Pure CSS Tooltips --- */
+.info-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: #e9ecef;
+  color: #495057;
+  border-radius: 50%;
+  width: 16px;
+  height: 16px;
+  font-size: 11px;
+  font-weight: bold;
+  cursor: help;
+  position: relative;
+}
+
+.info-icon:hover {
+  background: #dee2e6;
+}
+
+/* The actual hover text box popup container */
+/* The actual hover text box popup container */
+.info-icon .tooltip-text {
+  visibility: hidden;
+  width: 220px;
+  background-color: #212529;
+  color: #fff;
+  text-align: left;
+  border-radius: 6px;
+  padding: 8px 12px;
+  position: absolute;
+  z-index: 100;
+
+  /* 👇 CHANGE THESE TWO LINES: Drop down instead of up */
+  top: 130%;
+  bottom: auto;
+
+  left: 50%;
+  transform: translateX(-50%);
+  opacity: 0;
+  transition: opacity 0.2s ease;
+  font-size: 12px;
+  font-weight: normal;
+  line-height: 1.4;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+  pointer-events: none;
+}
+
+/* Show the text when hovering over the circle icon */
+.info-icon:hover .tooltip-text {
+  visibility: visible;
+  opacity: 1;
+}
+
+/* The actual hover text box popup container */
+.info-icon .tooltip-text {
+  visibility: hidden;
+  width: 220px;
+  background-color: #212529;
+  color: #fff;
+  text-align: left;
+  border-radius: 6px;
+  padding: 8px 12px;
+  position: absolute;
+  z-index: 100;
+
+  /* 👇 CHANGE THESE TWO LINES: Drop down instead of up */
+  top: 130%;
+  bottom: auto;
+
+  left: 50%;
+  transform: translateX(-50%);
+  opacity: 0;
+  transition: opacity 0.2s ease;
+  font-size: 12px;
+  font-weight: normal;
+  line-height: 1.4;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+  pointer-events: none;
+}
+
+/* Modifier for tooltips near the right edge of a scrolling container */
+.info-icon .tooltip-text.align-right {
+  left: auto;
+  right: -5px; /* Anchors it to the right, with 5px of breathing room */
+  transform: none; /* Removes the centering transform */
+}
