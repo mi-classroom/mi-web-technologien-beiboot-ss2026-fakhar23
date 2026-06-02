@@ -1,39 +1,45 @@
 import * as handPoseDetection from "@tensorflow-models/hand-pose-detection";
 import * as tf from "@tensorflow/tfjs-core";
 import "@tensorflow/tfjs-backend-webgl";
+import {
+  DEFAULT_PINCH_COOLDOWN_MS,
+  createGestureDetectorState,
+  detectHandGestures,
+  pruneGestureDetectorState,
+} from "./gestureDetector";
+import { formatCoordinate, roundValue } from "./mathUtils";
+import type { TrackerConfig, TrackedHand } from "./types";
 
-// setting or config available to other components when starting the tracker
-export interface TrackerConfig {
-  videoElement: HTMLVideoElement;
-  onData: (hands: any[]) => void;
-  flipHorizontal?: boolean;
-  normalize?: boolean;
-  precision?: number;
-}
+export type {
+  HandKeypoint2D,
+  HandKeypoint3D,
+  TrackedHand,
+  TrackedHandGestures,
+  TrackedHandKeypoint,
+  TrackedHandKeypoint3D,
+  TrackerConfig,
+} from "./types";
 
 // Factory function that creates and returns our headless tracking engine
 export function createHandTracker() {
-  // Internal state variables / hidden
   let detector: handPoseDetection.HandDetector | null = null;
   let animationFrameId: number | null = null;
-  let isRunning: boolean = false;
-
-  // Tracks the active loop session to prevent multiple loops from running at the same time
-  let currentLoopId: number = 0;
+  let isRunning = false;
+  let currentLoopId = 0;
+  let gestureState = createGestureDetectorState();
 
   // Loads the TensorFlow backend and compiles the MediaPipe ML model
-  async function initialize(modelType: "lite" | "full" = "full") {
+  async function initialize(modelType: "lite" | "full" = "lite") {
     await tf.ready();
     const model = handPoseDetection.SupportedModels.MediaPipeHands;
     detector = await handPoseDetection.createDetector(model, {
       runtime: "tfjs",
-      modelType: modelType,
+      modelType,
     });
   }
 
   // Starts the continuous camera analysis loop
   function start(config: TrackerConfig) {
-    // Stop any previously running loop first
     stop();
 
     if (!detector) {
@@ -41,9 +47,9 @@ export function createHandTracker() {
     }
 
     isRunning = true;
-    currentLoopId++; // Bump the ID to invalidate any leftover async frames
+    gestureState = createGestureDetectorState();
+    currentLoopId++;
 
-    // Capture the current loop ID locally to compare it inside the asynchronous loop
     const localLoopId = currentLoopId;
     const {
       videoElement,
@@ -51,79 +57,72 @@ export function createHandTracker() {
       flipHorizontal = true,
       normalize = true,
       precision = 4,
+      pinchCooldownMs = DEFAULT_PINCH_COOLDOWN_MS,
     } = config;
 
-    // The core recursive loop that processes webcam frames
     const detectLoop = async () => {
-      // Guard Check 1: Stop immediately if the tracker was turned off or updated
       if (!isRunning || localLoopId !== currentLoopId) return;
 
-      // Ensure the webcam is fully loaded and feeding data
-      if (videoElement.readyState === 4) {
+      if (videoElement.readyState === HTMLMediaElement.HAVE_ENOUGH_DATA) {
         const estimatedHands = await detector!.estimateHands(videoElement, {
           flipHorizontal,
         });
 
-        // Guard Check 2: The ML model estimation takes a few milliseconds.
-        // If the user changed settings during that wait time, drop this frame.
         if (!isRunning || localLoopId !== currentLoopId) return;
 
-        // Inline helper function to scale coordinates and truncate decimal places
-        const formatValue = (
-          value: number | null,
-          maxPixelDimension: number,
-        ): number | null => {
-          if (value === null) return null;
-          // Scale between 0.0 and 1.0 if normalization is active, otherwise keep raw pixel numbers
-          const processedValue = normalize ? value / maxPixelDimension : value;
-          return precision !== undefined
-            ? Number(processedValue.toFixed(precision))
-            : processedValue;
-        };
+        const currentTimeMs = performance.now();
+        const activeHandIds = new Set<string>();
 
-        // Format the raw machine learning output into clean object arrays
-        const formattedHands = estimatedHands.map((hand) => ({
-          hand: hand.handedness, // Tells us if it's a 'Left' or 'Right' hand
-          score: hand.score ? Number(hand.score.toFixed(3)) : null, // Confidence rating
+        const formattedHands: TrackedHand[] = estimatedHands.map(
+          (hand, index) => {
+            const handId = `${hand.handedness ?? "hand"}-${index}`;
+            activeHandIds.add(handId);
 
-          // Clean 2D Screen Space Coordinates
-          keypoints: hand.keypoints.map((kp) => ({
-            name: kp.name,
-            x: formatValue(kp.x, videoElement.width),
-            y: formatValue(kp.y, videoElement.height),
-          })),
+            return {
+              hand: hand.handedness,
+              score: roundValue(hand.score, 3) ?? null,
+              gestures: detectHandGestures({
+                handId,
+                keypoints3D: hand.keypoints3D,
+                currentTimeMs,
+                precision,
+                pinchCooldownMs,
+                state: gestureState,
+              }),
+              keypoints: hand.keypoints.map((keypoint) => ({
+                name: keypoint.name,
+                x: formatCoordinate(
+                  keypoint.x,
+                  videoElement.width,
+                  normalize,
+                  precision,
+                ),
+                y: formatCoordinate(
+                  keypoint.y,
+                  videoElement.height,
+                  normalize,
+                  precision,
+                ),
+              })),
+              keypoints3D: hand.keypoints3D?.map((keypoint) => ({
+                name: keypoint.name,
+                x: roundValue(keypoint.x, precision),
+                y: roundValue(keypoint.y, precision),
+                z: roundValue(keypoint.z, precision),
+              })),
+            };
+          },
+        );
 
-          // Clean 3D Metric Space Coordinates
-          keypoints3D: hand.keypoints3D
-            ? hand.keypoints3D.map((kp) => ({
-                name: kp.name,
-                x:
-                  precision !== undefined && kp.x !== null
-                    ? Number(kp.x.toFixed(precision))
-                    : kp.x,
-                y:
-                  precision !== undefined && kp.y !== null
-                    ? Number(kp.y.toFixed(precision))
-                    : kp.y,
-                z:
-                  precision !== undefined && kp.z !== null
-                    ? Number(kp.z?.toFixed(precision))
-                    : kp.z,
-              }))
-            : undefined,
-        }));
-
-        // Send the formatted raw data back to the application callback
+        pruneGestureDetectorState(gestureState, activeHandIds);
         onData(formattedHands);
       }
 
-      // Guard Check 3: Only schedule the next webcam frame if this loop version is still active
       if (isRunning && localLoopId === currentLoopId) {
         animationFrameId = requestAnimationFrame(detectLoop);
       }
     };
 
-    // Fire the initial loop frame
     detectLoop();
   }
 
@@ -136,6 +135,5 @@ export function createHandTracker() {
     }
   }
 
-  // Expose our public interface methods to developers
   return { initialize, start, stop };
 }

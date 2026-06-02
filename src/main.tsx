@@ -4,6 +4,7 @@ import App from "./UI/App.tsx";
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
+    {/* <PostureDemo /> */}
     <App />
   </StrictMode>,
 );

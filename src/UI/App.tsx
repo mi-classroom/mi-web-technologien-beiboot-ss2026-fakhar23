@@ -1,8 +1,13 @@
 import { useEffect, useRef, useState } from "react";
+import { Toaster, toast } from "sonner";
 import HandLogHistory from "./HandLogHistory";
 import "./App.css";
 import TrackerControls from "./TrackerControls";
-import { createHandTracker } from "../Core/tracker";
+import {
+  createHandTracker,
+  type TrackedHand,
+  type TrackedHandKeypoint,
+} from "../Core/tracker";
 
 // Set a maximum display width. The height will calculate automatically based on the camera's aspect ratio.
 const MAX_WIDTH = 640;
@@ -16,6 +21,26 @@ const SKELETON_RENDER_CONFIG = {
   pinky: { path: [0, 17, 18, 19, 20], color: "pink" },
 };
 
+const renderColoredPinchState = (handsData: TrackedHand[]) => {
+  const jsonText = JSON.stringify(handsData, null, 2);
+  const parts = jsonText.split(/("(?:active|click)":\s*)(true|false)/g);
+
+  return parts.map((part, index) => {
+    if (part === "true" || part === "false") {
+      return (
+        <span
+          className={part === "true" ? "pinch-true" : "pinch-false"}
+          key={`${part}-${index}`}
+        >
+          {part}
+        </span>
+      );
+    }
+
+    return part;
+  });
+};
+
 function App() {
   // HTML Element and tracker class references
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -24,7 +49,8 @@ function App() {
 
   // Core application tracking states
   const [loading, setLoading] = useState(true);
-  const [hands, setHands] = useState<any[]>([]);
+  const [hands, setHands] = useState<TrackedHand[]>([]);
+  const [debugMode, setDebugMode] = useState(true);
 
   // Dynamic Resolution State (defaults to 640x480 until the hardware camera is analyzed)
   const [videoSize, setVideoSize] = useState({ width: 640, height: 480 });
@@ -34,7 +60,7 @@ function App() {
   const [precision, setPrecision] = useState(3);
 
   // Draws lines and joint markers onto the canvas overlay using output form Tracker.ts
-  const renderHandSkeleton = (detectedHands: any[]) => {
+  const renderHandSkeleton = (detectedHands: TrackedHand[]) => {
     if (!canvasRef.current) return;
     const ctx = canvasRef.current.getContext("2d");
     if (!ctx) return;
@@ -78,7 +104,7 @@ function App() {
       });
 
       // 2. Draw white circle markers at every individual joint intersection
-      keypoints.forEach((kp: any) => {
+      keypoints.forEach((kp: TrackedHandKeypoint) => {
         if (kp.x !== null && kp.y !== null) {
           const x = normalize ? kp.x * width : kp.x;
           const y = normalize ? kp.y * height : kp.y;
@@ -91,6 +117,17 @@ function App() {
           ctx.lineWidth = 1.5;
           ctx.stroke();
         }
+      });
+    });
+  };
+
+  const notifyPinchClicks = (detectedHands: TrackedHand[]) => {
+    detectedHands.forEach((hand) => {
+      if (!hand.gestures.pinch.click) return;
+
+      toast.success(`${hand.hand ?? "Hand"} pinch registered`, {
+        description: "Virtual click emitted by the headless core.",
+        duration: 900,
       });
     });
   };
@@ -175,9 +212,10 @@ function App() {
       normalize: normalize, // Uses our live reactive checkbox state variable
       precision: precision, // Uses our live reactive numeric select dropdown option state
       flipHorizontal: true,
-      onData: (data: any) => {
+      onData: (data) => {
         setHands(data);
         renderHandSkeleton(data);
+        notifyPinchClicks(data);
       },
     });
 
@@ -189,7 +227,18 @@ function App() {
 
   return (
     <div className="app-container">
-      <h2>Hand Tracking with TensorFlow.js (Headless Architecture)</h2>
+      <Toaster position="top-center" richColors visibleToasts={2} />
+      <header className="app-header">
+        <h2>Hand Tracking with TensorFlow.js (Headless Architecture)</h2>
+        <label className="debug-toggle">
+          <input
+            type="checkbox"
+            checked={debugMode}
+            onChange={(event) => setDebugMode(event.target.checked)}
+          />
+          Debug mode
+        </label>
+      </header>
       {loading && <div className="loading-indicator">Loading ML Model...</div>}
 
       <div className="workspace-layout">
@@ -217,29 +266,35 @@ function App() {
           </div>
         </div>
 
-        <div className="live-monitor" style={{ maxHeight: videoSize.height }}>
-          <TrackerControls
-            normalize={normalize}
-            setNormalize={setNormalize}
-            precision={precision}
-            setPrecision={setPrecision}
-          />
-          <h3 style={{ marginTop: 0 }}>
-            Live API Data ({hands.length} hands):
-          </h3>
-          <pre className="code-block">{JSON.stringify(hands, null, 2)}</pre>
-        </div>
+        {debugMode && (
+          <div className="live-monitor" style={{ maxHeight: videoSize.height }}>
+            <TrackerControls
+              normalize={normalize}
+              setNormalize={setNormalize}
+              precision={precision}
+              setPrecision={setPrecision}
+            />
+            <h3 style={{ marginTop: 0 }}>
+              Live API Data ({hands.length} hands):
+            </h3>
+            <pre className="code-block">{renderColoredPinchState(hands)}</pre>
+          </div>
+        )}
       </div>
 
-      <hr style={{ borderColor: "#dee2e6", margin: "40px 0" }} />
+      {debugMode && (
+        <>
+          <hr style={{ borderColor: "#dee2e6", margin: "40px 0" }} />
 
-      <HandLogHistory
-        handsData={hands}
-        videoRef={videoRef}
-        canvasRef={canvasRef}
-        trackingWidth={videoSize.width}
-        trackingHeight={videoSize.height}
-      />
+          <HandLogHistory
+            handsData={hands}
+            videoRef={videoRef}
+            canvasRef={canvasRef}
+            trackingWidth={videoSize.width}
+            trackingHeight={videoSize.height}
+          />
+        </>
+      )}
     </div>
   );
 }
