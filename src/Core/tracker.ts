@@ -3,12 +3,20 @@ import * as tf from "@tensorflow/tfjs-core";
 import "@tensorflow/tfjs-backend-webgl";
 import {
   DEFAULT_PINCH_COOLDOWN_MS,
-  createGestureDetectorState,
-  detectHandGestures,
-  pruneGestureDetectorState,
+  createDefaultGestureLibrary,
 } from "./gestureDetector";
 import { formatCoordinate, roundValue } from "./mathUtils";
 import type { TrackerConfig, TrackedHand } from "./types";
+import type { GestureLibrary } from "./gestureLibrary";
+
+export type {
+  GestureRecognizer,
+  GestureRecognizerContext,
+} from "./gestureDetector";
+export {
+  GestureLibrary,
+  createDefaultGestureLibrary,
+} from "./gestureDetector";
 
 export type {
   HandKeypoint2D,
@@ -26,7 +34,7 @@ export function createHandTracker() {
   let animationFrameId: number | null = null;
   let isRunning = false;
   let currentLoopId = 0;
-  let gestureState = createGestureDetectorState();
+  let gestureLibrary: GestureLibrary | null = null;
 
   // Loads the TensorFlow backend and compiles the MediaPipe ML model
   async function initialize(modelType: "lite" | "full" = "lite") {
@@ -46,11 +54,6 @@ export function createHandTracker() {
       throw new Error("Tracker not initialized. Call initialize() first.");
     }
 
-    isRunning = true;
-    gestureState = createGestureDetectorState();
-    currentLoopId++;
-
-    const localLoopId = currentLoopId;
     const {
       videoElement,
       onData,
@@ -58,7 +61,22 @@ export function createHandTracker() {
       normalize = true,
       precision = 4,
       pinchCooldownMs = DEFAULT_PINCH_COOLDOWN_MS,
+      scrollSpeedPx,
+      gestureLibrary: configuredGestureLibrary,
     } = config;
+
+    isRunning = true;
+    gestureLibrary =
+      configuredGestureLibrary ??
+      createDefaultGestureLibrary({
+        pinchCooldownMs,
+        scrollSpeedPx,
+      });
+    gestureLibrary.reset();
+    currentLoopId++;
+
+    const localLoopId = currentLoopId;
+    const activeGestureLibrary = gestureLibrary;
 
     const detectLoop = async () => {
       if (!isRunning || localLoopId !== currentLoopId) return;
@@ -81,14 +99,15 @@ export function createHandTracker() {
             return {
               hand: hand.handedness,
               score: roundValue(hand.score, 3) ?? null,
-              gestures: detectHandGestures({
+              gestures: activeGestureLibrary.evaluateHand({
                 handId,
+                keypoints: hand.keypoints,
                 keypoints3D: hand.keypoints3D,
+                videoWidth: videoElement.width,
+                videoHeight: videoElement.height,
                 currentTimeMs,
                 precision,
-                pinchCooldownMs,
-                state: gestureState,
-              }),
+              }) as unknown as TrackedHand["gestures"],
               keypoints: hand.keypoints.map((keypoint) => ({
                 name: keypoint.name,
                 x: formatCoordinate(
@@ -114,7 +133,29 @@ export function createHandTracker() {
           },
         );
 
-        pruneGestureDetectorState(gestureState, activeHandIds);
+        const confirmingPinchHandIndex = formattedHands.findIndex(
+          (hand) => hand.gestures.pinch.click,
+        );
+
+        if (confirmingPinchHandIndex !== -1) {
+          const navigationHand = formattedHands.find(
+            (hand, index) =>
+              index !== confirmingPinchHandIndex &&
+              hand.gestures.navigation.active &&
+              hand.gestures.navigation.direction !== null &&
+              hand.gestures.navigation.holdProgressMs >= 1000,
+          );
+
+          if (navigationHand?.gestures.navigation.direction === "back") {
+            navigationHand.gestures.navigation.back = true;
+          } else if (
+            navigationHand?.gestures.navigation.direction === "forward"
+          ) {
+            navigationHand.gestures.navigation.forward = true;
+          }
+        }
+
+        activeGestureLibrary.pruneInactiveHands(activeHandIds);
         onData(formattedHands);
       }
 

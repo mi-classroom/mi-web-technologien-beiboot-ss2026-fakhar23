@@ -7,7 +7,7 @@ import {
   createHandTracker,
   type TrackedHand,
   type TrackedHandKeypoint,
-} from "../Core/tracker";
+} from "../Core";
 
 // Set a maximum display width. The height will calculate automatically based on the camera's aspect ratio.
 const MAX_WIDTH = 640;
@@ -21,9 +21,85 @@ const SKELETON_RENDER_CONFIG = {
   pinky: { path: [0, 17, 18, 19, 20], color: "pink" },
 };
 
+type VirtualEventKind =
+  | "click"
+  | "scrollReady"
+  | "scrollExit"
+  | "scrollTop"
+  | "scrollDown"
+  | "navigateBack"
+  | "navigateForward";
+
+type VirtualEventConfig = {
+  icon: string;
+  label: string;
+  color: string;
+  background: string;
+  className: string;
+};
+
+type RecentVirtualEvent = VirtualEventConfig & {
+  id: number;
+  detail: string;
+};
+
+const VIRTUAL_EVENT_CONFIG: Record<VirtualEventKind, VirtualEventConfig> = {
+  click: {
+    icon: "⌖",
+    label: "Virtual Click",
+    color: "#198754",
+    background: "#e9f7ef",
+    className: "click",
+  },
+  scrollReady: {
+    icon: "✓",
+    label: "Scroll Ready",
+    color: "#20c997",
+    background: "#e8fbf5",
+    className: "scroll-ready",
+  },
+  scrollExit: {
+    icon: "×",
+    label: "Scroll Mode Off",
+    color: "#6c757d",
+    background: "#f1f3f5",
+    className: "scroll-exit",
+  },
+  scrollTop: {
+    icon: "↑",
+    label: "Scroll Top",
+    color: "#0d6efd",
+    background: "#eaf2ff",
+    className: "scroll-top",
+  },
+  scrollDown: {
+    icon: "↓",
+    label: "Scroll Down",
+    color: "#0dcaf0",
+    background: "#e7faff",
+    className: "scroll-down",
+  },
+  navigateBack: {
+    icon: "←",
+    label: "Navigate Back",
+    color: "#6f42c1",
+    background: "#f1ecfb",
+    className: "navigate-back",
+  },
+  navigateForward: {
+    icon: "→",
+    label: "Navigate Forward",
+    color: "#fd7e14",
+    background: "#fff1e5",
+    className: "navigate-forward",
+  },
+};
+
 const renderColoredPinchState = (handsData: TrackedHand[]) => {
   const jsonText = JSON.stringify(handsData, null, 2);
-  const parts = jsonText.split(/("(?:active|click)":\s*)(true|false)/g);
+  const parts = jsonText.split(
+    /("(?:active|click|toTop|down|openPalm|ready|entered|exited|back|forward)":\s*)(true|false)/g,
+  );
 
   return parts.map((part, index) => {
     if (part === "true" || part === "false") {
@@ -46,11 +122,14 @@ function App() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const trackerRef = useRef<ReturnType<typeof createHandTracker> | null>(null);
+  const activeScrollDirectionRef = useRef<"up" | "down" | null>(null);
 
   // Core application tracking states
   const [loading, setLoading] = useState(true);
   const [hands, setHands] = useState<TrackedHand[]>([]);
   const [debugMode, setDebugMode] = useState(true);
+  const [recentVirtualEvent, setRecentVirtualEvent] =
+    useState<RecentVirtualEvent | null>(null);
 
   // Dynamic Resolution State (defaults to 640x480 until the hardware camera is analyzed)
   const [videoSize, setVideoSize] = useState({ width: 640, height: 480 });
@@ -58,6 +137,45 @@ function App() {
   // --- Runtime Interactive Config States ---
   const [normalize, setNormalize] = useState(true);
   const [precision, setPrecision] = useState(3);
+  const scrollModeGesture = hands.find(
+    (hand) => hand.gestures.scroll.mode !== "idle",
+  )?.gestures.scroll;
+  const navigationHoldGesture = hands.find(
+    (hand) =>
+      hand.gestures.scroll.mode === "idle" && hand.gestures.navigation.active,
+  )?.gestures.navigation;
+  const navigationReady =
+    (navigationHoldGesture?.holdProgressMs ?? 0) >= 1000;
+
+  const emitVirtualEvent = (
+    kind: VirtualEventKind,
+    handName: string | undefined,
+    detail: string,
+  ) => {
+    const config = VIRTUAL_EVENT_CONFIG[kind];
+    const title = `${handName ?? "Hand"}: ${config.label}`;
+
+    setRecentVirtualEvent({
+      ...config,
+      id: Date.now(),
+      detail,
+    });
+
+    toast(title, {
+      description: detail,
+      duration: 1300,
+      icon: (
+        <span className={`virtual-toast-icon ${config.className}`}>
+          {config.icon}
+        </span>
+      ),
+      style: {
+        borderLeft: `6px solid ${config.color}`,
+        background: config.background,
+        color: "#17202a",
+      },
+    });
+  };
 
   // Draws lines and joint markers onto the canvas overlay using output form Tracker.ts
   const renderHandSkeleton = (detectedHands: TrackedHand[]) => {
@@ -122,15 +240,123 @@ function App() {
   };
 
   const notifyPinchClicks = (detectedHands: TrackedHand[]) => {
-    detectedHands.forEach((hand) => {
-      if (!hand.gestures.pinch.click) return;
+    const navigationConfirmed = detectedHands.some(
+      (hand) =>
+        hand.gestures.navigation.back || hand.gestures.navigation.forward,
+    );
 
-      toast.success(`${hand.hand ?? "Hand"} pinch registered`, {
-        description: "Virtual click emitted by the headless core.",
-        duration: 900,
-      });
+    detectedHands.forEach((hand) => {
+      if (
+        !hand.gestures.pinch.click ||
+        navigationConfirmed ||
+        hand.gestures.scroll.exited ||
+        hand.gestures.navigation.back ||
+        hand.gestures.navigation.forward
+      ) {
+        return;
+      }
+
+      emitVirtualEvent(
+        "click",
+        hand.hand,
+        "Pinch gesture emitted a virtual click.",
+      );
     });
   };
+
+  const handleScrollGestures = (detectedHands: TrackedHand[]) => {
+    detectedHands.forEach((hand) => {
+      if (hand.gestures.scroll.exited) {
+        activeScrollDirectionRef.current = null;
+        emitVirtualEvent(
+          "scrollExit",
+          hand.hand,
+          "Pinch returned control to normal gesture mode.",
+        );
+        return;
+      }
+
+      if (hand.gestures.scroll.entered) {
+        emitVirtualEvent(
+          "scrollReady",
+          hand.hand,
+          "Open palm held for one second. Pinch to exit.",
+        );
+        return;
+      }
+
+      if (hand.gestures.scroll.toTop) {
+        window.scrollBy({
+          top: -hand.gestures.scroll.scrollSpeedPx,
+          behavior: "auto",
+        });
+        if (activeScrollDirectionRef.current !== "up") {
+          activeScrollDirectionRef.current = "up";
+          emitVirtualEvent(
+            "scrollTop",
+            hand.hand,
+            "Palm above anchor. Infinite scroll up started.",
+          );
+        }
+        return;
+      }
+
+      if (hand.gestures.scroll.down) {
+        window.scrollBy({
+          top: hand.gestures.scroll.scrollSpeedPx,
+          behavior: "auto",
+        });
+        if (activeScrollDirectionRef.current !== "down") {
+          activeScrollDirectionRef.current = "down";
+          emitVirtualEvent(
+            "scrollDown",
+            hand.hand,
+            "Palm below anchor. Infinite scroll down started.",
+          );
+        }
+        return;
+      }
+
+      if (hand.gestures.scroll.mode === "ready") {
+        activeScrollDirectionRef.current = null;
+      }
+    });
+  };
+
+  const notifyNavigationGestures = (detectedHands: TrackedHand[]) => {
+    if (detectedHands.some((hand) => hand.gestures.scroll.mode !== "idle")) {
+      return;
+    }
+
+    detectedHands.forEach((hand) => {
+      if (hand.gestures.navigation.back) {
+        emitVirtualEvent(
+          "navigateBack",
+          hand.hand,
+          "Little finger held pointing left.",
+        );
+        return;
+      }
+
+      if (hand.gestures.navigation.forward) {
+        emitVirtualEvent(
+          "navigateForward",
+          hand.hand,
+          "Little finger held pointing right.",
+        );
+      }
+    });
+  };
+
+  useEffect(() => {
+    if (!recentVirtualEvent) return;
+
+    const timeoutId = window.setTimeout(() => {
+      setRecentVirtualEvent(null);
+    }, 1600);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [recentVirtualEvent]);
 
   // EFFECT 1: Handles camera authorization and ML initialization ONCE on mount
   useEffect(() => {
@@ -216,6 +442,8 @@ function App() {
         setHands(data);
         renderHandSkeleton(data);
         notifyPinchClicks(data);
+        handleScrollGestures(data);
+        notifyNavigationGestures(data);
       },
     });
 
@@ -263,6 +491,53 @@ function App() {
               className="canvas-overlay"
               style={{ width: videoSize.width, height: videoSize.height }}
             />
+            {scrollModeGesture && (
+              <div className={`scroll-mode-indicator ${scrollModeGesture.mode}`}>
+                <strong>
+                  {scrollModeGesture.ready
+                    ? "Scroll mode ready"
+                    : "Hold open palm"}
+                </strong>
+                <small>
+                  {scrollModeGesture.ready
+                    ? "Pinch to exit"
+                    : `${scrollModeGesture.holdProgressMs}/1000 ms`}
+                </small>
+              </div>
+            )}
+            {navigationHoldGesture && (
+              <div
+                className={`navigation-hold-indicator ${navigationHoldGesture.direction}`}
+              >
+                <strong>
+                  {navigationReady
+                    ? "Other hand pinch"
+                    : navigationHoldGesture.direction === "back"
+                      ? "Hold pinky left"
+                      : "Hold pinky right"}
+                </strong>
+                <small>
+                  {navigationReady
+                    ? navigationHoldGesture.direction === "back"
+                      ? "Ready: navigate back"
+                      : "Ready: navigate forward"
+                    : `${navigationHoldGesture.holdProgressMs}/1000 ms`}
+                </small>
+              </div>
+            )}
+            {recentVirtualEvent && (
+              <div
+                className={`virtual-event-hud ${recentVirtualEvent.className}`}
+              >
+                <span className="virtual-event-icon">
+                  {recentVirtualEvent.icon}
+                </span>
+                <span className="virtual-event-copy">
+                  <strong>{recentVirtualEvent.label}</strong>
+                  <small>{recentVirtualEvent.detail}</small>
+                </span>
+              </div>
+            )}
           </div>
         </div>
 

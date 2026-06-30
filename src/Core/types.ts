@@ -1,3 +1,5 @@
+import type { GestureLibrary } from "./gestureLibrary";
+
 export type HandKeypoint2D = {
   name?: string;
   x: number | null | undefined;
@@ -34,13 +36,42 @@ export interface TrackedPinchGesture {
 
 export interface TrackedScrollGesture {
   active: boolean;
+  mode: "idle" | "arming" | "ready";
+  ready: boolean;
+  entered: boolean;
+  exited: boolean;
+  holdProgressMs: number;
+  direction: "up" | "down" | null;
+  toTop: boolean;
+  down: boolean;
+  scrollSpeedPx: number;
+  anchorY: number | null;
+  deadZone: number;
+  openPalm: boolean;
+  palmQuality: {
+    fingersExtended: boolean;
+    screenFacing: boolean;
+    fingersSeparated: boolean;
+    thumbSpread: boolean;
+  };
   y: number | null;
   deltaY: number | null;
+  movementY: number | null;
+}
+
+export interface TrackedNavigationGesture {
+  active: boolean;
+  direction: "back" | "forward" | null;
+  back: boolean;
+  forward: boolean;
+  holdProgressMs: number;
+  pinkyExtensionX: number | null;
 }
 
 export interface TrackedHandGestures {
   pinch: TrackedPinchGesture;
   scroll: TrackedScrollGesture;
+  navigation: TrackedNavigationGesture;
 }
 
 export interface TrackedHand {
@@ -58,4 +89,6 @@ export interface TrackerConfig {
   normalize?: boolean;
   precision?: number;
   pinchCooldownMs?: number;
+  scrollSpeedPx?: number;
+  gestureLibrary?: GestureLibrary;
 }
