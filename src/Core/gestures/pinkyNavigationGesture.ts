@@ -8,6 +8,7 @@ import { getPinkyExtensionX } from "../gestureUtils";
 
 const NAVIGATION_EXTENSION_THRESHOLD = 0.12;
 const NAVIGATION_HOLD_MS = 1000;
+const PINKY_HORIZONTAL_RATIO = 2.5;
 
 interface NavigationGestureState {
   holdDirection: "back" | "forward" | null;
@@ -23,6 +24,7 @@ function getPinkyNavigationDirection(
   >[0],
 ): "back" | "forward" | null {
   const palmCenter = context.keypoints?.[9];
+  const pinkyBase = context.keypoints?.[17];
   const pinkyTip = context.keypoints?.[20];
   const pinkyExtensionX = getPinkyExtensionX(
     context.keypoints,
@@ -35,6 +37,10 @@ function getPinkyNavigationDirection(
     palmCenter?.x === undefined ||
     palmCenter?.y === null ||
     palmCenter?.y === undefined ||
+    pinkyBase?.x === null ||
+    pinkyBase?.x === undefined ||
+    pinkyBase?.y === null ||
+    pinkyBase?.y === undefined ||
     pinkyTip?.x === null ||
     pinkyTip?.x === undefined ||
     pinkyTip?.y === null ||
@@ -45,10 +51,14 @@ function getPinkyNavigationDirection(
 
   const horizontalMovement = Math.abs(pinkyTip.x - palmCenter.x);
   const verticalMovement = Math.abs(pinkyTip.y - palmCenter.y);
-  const isPointingSideways = horizontalMovement > verticalMovement * 0.75;
+  const pinkyBoneX = Math.abs(pinkyTip.x - pinkyBase.x);
+  const pinkyBoneY = Math.abs(pinkyTip.y - pinkyBase.y);
+  const isPointingSideways = horizontalMovement > verticalMovement * 1.25;
+  const isPinkyHorizontal = pinkyBoneX > pinkyBoneY * PINKY_HORIZONTAL_RATIO;
 
   if (
     !isPointingSideways ||
+    !isPinkyHorizontal ||
     Math.abs(pinkyExtensionX) < NAVIGATION_EXTENSION_THRESHOLD
   ) {
     return null;

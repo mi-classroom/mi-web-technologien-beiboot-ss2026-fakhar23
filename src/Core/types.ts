@@ -68,10 +68,30 @@ export interface TrackedNavigationGesture {
   pinkyExtensionX: number | null;
 }
 
+export interface TrackedZoomGesture {
+  active: boolean;
+  mode: "idle" | "arming" | "ready";
+  waitingForPalms: boolean;
+  ready: boolean;
+  entered: boolean;
+  exited: boolean;
+  holdProgressMs: number;
+  palmCount: number;
+  direction: "in" | "out" | null;
+  zoomIn: boolean;
+  zoomOut: boolean;
+  scale: number;
+  anchorDistance: number | null;
+  deadZone: number;
+  distance: number | null;
+  movement: number | null;
+}
+
 export interface TrackedHandGestures {
   pinch: TrackedPinchGesture;
   scroll: TrackedScrollGesture;
   navigation: TrackedNavigationGesture;
+  zoom: TrackedZoomGesture;
 }
 
 export interface TrackedHand {
@@ -90,5 +110,6 @@ export interface TrackerConfig {
   precision?: number;
   pinchCooldownMs?: number;
   scrollSpeedPx?: number;
+  zoomDeadZone?: number;
   gestureLibrary?: GestureLibrary;
 }

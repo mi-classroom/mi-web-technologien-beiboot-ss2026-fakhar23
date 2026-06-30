@@ -21,8 +21,23 @@ const SKELETON_RENDER_CONFIG = {
   pinky: { path: [0, 17, 18, 19, 20], color: "pink" },
 };
 
+const PREVIEW_PAGES = ["Preview page A", "Preview page B", "Preview page C"];
+
+const LOREM_PARAGRAPHS = Array.from(
+  { length: 14 },
+  (_, index) =>
+    `Lorem ipsum section ${index + 1}. Gesture testing needs a long scrollable ` +
+    "surface, so this preview window contains repeated readable text. Move your " +
+    "open palm above or below the scroll anchor to scroll this panel, pinch to " +
+    "emit a virtual click, and use pinky navigation to change the preview page.",
+);
+
 type VirtualEventKind =
   | "click"
+  | "zoomReady"
+  | "zoomExit"
+  | "zoomIn"
+  | "zoomOut"
   | "scrollReady"
   | "scrollExit"
   | "scrollTop"
@@ -50,6 +65,34 @@ const VIRTUAL_EVENT_CONFIG: Record<VirtualEventKind, VirtualEventConfig> = {
     color: "#198754",
     background: "#e9f7ef",
     className: "click",
+  },
+  zoomReady: {
+    icon: "⛶",
+    label: "Zoom Ready",
+    color: "#6610f2",
+    background: "#f0e8ff",
+    className: "zoom-ready",
+  },
+  zoomExit: {
+    icon: "×",
+    label: "Zoom Mode Off",
+    color: "#6c757d",
+    background: "#f1f3f5",
+    className: "zoom-exit",
+  },
+  zoomIn: {
+    icon: "+",
+    label: "Zoom In",
+    color: "#198754",
+    background: "#e9f7ef",
+    className: "zoom-in",
+  },
+  zoomOut: {
+    icon: "-",
+    label: "Zoom Out",
+    color: "#dc3545",
+    background: "#fdecec",
+    className: "zoom-out",
   },
   scrollReady: {
     icon: "✓",
@@ -98,7 +141,7 @@ const VIRTUAL_EVENT_CONFIG: Record<VirtualEventKind, VirtualEventConfig> = {
 const renderColoredPinchState = (handsData: TrackedHand[]) => {
   const jsonText = JSON.stringify(handsData, null, 2);
   const parts = jsonText.split(
-    /("(?:active|click|toTop|down|openPalm|ready|entered|exited|back|forward)":\s*)(true|false)/g,
+    /("(?:active|click|toTop|down|openPalm|ready|entered|exited|back|forward|zoomIn|zoomOut)":\s*)(true|false)/g,
   );
 
   return parts.map((part, index) => {
@@ -121,15 +164,23 @@ function App() {
   // HTML Element and tracker class references
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const previewRef = useRef<HTMLDivElement>(null);
   const trackerRef = useRef<ReturnType<typeof createHandTracker> | null>(null);
   const activeScrollDirectionRef = useRef<"up" | "down" | null>(null);
+  const activeZoomDirectionRef = useRef<"in" | "out" | null>(null);
 
   // Core application tracking states
   const [loading, setLoading] = useState(true);
   const [hands, setHands] = useState<TrackedHand[]>([]);
-  const [debugMode, setDebugMode] = useState(true);
+  const [debugMode, setDebugMode] = useState(false);
   const [recentVirtualEvent, setRecentVirtualEvent] =
     useState<RecentVirtualEvent | null>(null);
+  const [stickyZoomGesture, setStickyZoomGesture] = useState<
+    TrackedHand["gestures"]["zoom"] | null
+  >(null);
+  const [previewPageIndex, setPreviewPageIndex] = useState(0);
+  const [previewStatus, setPreviewStatus] = useState("No virtual event yet.");
+  const [previewClickCount, setPreviewClickCount] = useState(0);
 
   // Dynamic Resolution State (defaults to 640x480 until the hardware camera is analyzed)
   const [videoSize, setVideoSize] = useState({ width: 640, height: 480 });
@@ -140,12 +191,20 @@ function App() {
   const scrollModeGesture = hands.find(
     (hand) => hand.gestures.scroll.mode !== "idle",
   )?.gestures.scroll;
+  const liveZoomGesture = hands.find(
+    (hand) => hand.gestures.zoom.mode !== "idle" || hand.gestures.zoom.exited,
+  )?.gestures.zoom;
+  const zoomModeGesture =
+    liveZoomGesture ??
+    (stickyZoomGesture?.mode !== "idle" ? stickyZoomGesture : undefined);
+  const previewZoomScale = zoomModeGesture?.ready ? zoomModeGesture.scale : 1;
   const navigationHoldGesture = hands.find(
     (hand) =>
-      hand.gestures.scroll.mode === "idle" && hand.gestures.navigation.active,
+      hand.gestures.scroll.mode === "idle" &&
+      hand.gestures.zoom.mode === "idle" &&
+      hand.gestures.navigation.active,
   )?.gestures.navigation;
-  const navigationReady =
-    (navigationHoldGesture?.holdProgressMs ?? 0) >= 1000;
+  const navigationReady = (navigationHoldGesture?.holdProgressMs ?? 0) >= 1000;
 
   const emitVirtualEvent = (
     kind: VirtualEventKind,
@@ -174,6 +233,25 @@ function App() {
         background: config.background,
         color: "#17202a",
       },
+    });
+  };
+
+  const setPreviewAction = (message: string) => {
+    setPreviewStatus(`${new Date().toLocaleTimeString()}: ${message}`);
+  };
+
+  const scrollPreviewBy = (amount: number) => {
+    if (previewRef.current) {
+      previewRef.current.scrollBy({
+        top: amount,
+        behavior: "auto",
+      });
+      return;
+    }
+
+    window.scrollBy({
+      top: amount,
+      behavior: "auto",
     });
   };
 
@@ -244,11 +322,15 @@ function App() {
       (hand) =>
         hand.gestures.navigation.back || hand.gestures.navigation.forward,
     );
+    const zoomActiveOrExited = detectedHands.some(
+      (hand) => hand.gestures.zoom.mode !== "idle" || hand.gestures.zoom.exited,
+    );
 
     detectedHands.forEach((hand) => {
       if (
         !hand.gestures.pinch.click ||
         navigationConfirmed ||
+        zoomActiveOrExited ||
         hand.gestures.scroll.exited ||
         hand.gestures.navigation.back ||
         hand.gestures.navigation.forward
@@ -261,10 +343,68 @@ function App() {
         hand.hand,
         "Pinch gesture emitted a virtual click.",
       );
+      setPreviewClickCount((count) => count + 1);
+      setPreviewAction("Virtual click fired in preview.");
     });
   };
 
+  const handleZoomGestures = (detectedHands: TrackedHand[]) => {
+    const zoomGesture = detectedHands.find(
+      (hand) => hand.gestures.zoom.mode !== "idle" || hand.gestures.zoom.exited,
+    )?.gestures.zoom;
+
+    if (!zoomGesture) {
+      return;
+    }
+
+    if (zoomGesture.exited) {
+      activeZoomDirectionRef.current = null;
+      setStickyZoomGesture(null);
+      emitVirtualEvent(
+        "zoomExit",
+        undefined,
+        "Pinch returned control to normal gesture mode.",
+      );
+      return;
+    }
+
+    setStickyZoomGesture(zoomGesture);
+
+    if (zoomGesture.entered) {
+      emitVirtualEvent(
+        "zoomReady",
+        undefined,
+        "Both palms held for one second. Pinch to exit.",
+      );
+      return;
+    }
+
+    if (zoomGesture.zoomIn) {
+      if (activeZoomDirectionRef.current !== "in") {
+        activeZoomDirectionRef.current = "in";
+        emitVirtualEvent("zoomIn", undefined, "Hands moved apart.");
+      }
+      return;
+    }
+
+    if (zoomGesture.zoomOut) {
+      if (activeZoomDirectionRef.current !== "out") {
+        activeZoomDirectionRef.current = "out";
+        emitVirtualEvent("zoomOut", undefined, "Hands moved together.");
+      }
+      return;
+    }
+
+    if (zoomGesture.mode === "ready") {
+      activeZoomDirectionRef.current = null;
+    }
+  };
+
   const handleScrollGestures = (detectedHands: TrackedHand[]) => {
+    if (detectedHands.some((hand) => hand.gestures.zoom.mode !== "idle")) {
+      return;
+    }
+
     detectedHands.forEach((hand) => {
       if (hand.gestures.scroll.exited) {
         activeScrollDirectionRef.current = null;
@@ -286,10 +426,7 @@ function App() {
       }
 
       if (hand.gestures.scroll.toTop) {
-        window.scrollBy({
-          top: -hand.gestures.scroll.scrollSpeedPx,
-          behavior: "auto",
-        });
+        scrollPreviewBy(-hand.gestures.scroll.scrollSpeedPx);
         if (activeScrollDirectionRef.current !== "up") {
           activeScrollDirectionRef.current = "up";
           emitVirtualEvent(
@@ -297,15 +434,13 @@ function App() {
             hand.hand,
             "Palm above anchor. Infinite scroll up started.",
           );
+          setPreviewAction("Preview panel is scrolling up.");
         }
         return;
       }
 
       if (hand.gestures.scroll.down) {
-        window.scrollBy({
-          top: hand.gestures.scroll.scrollSpeedPx,
-          behavior: "auto",
-        });
+        scrollPreviewBy(hand.gestures.scroll.scrollSpeedPx);
         if (activeScrollDirectionRef.current !== "down") {
           activeScrollDirectionRef.current = "down";
           emitVirtualEvent(
@@ -313,6 +448,7 @@ function App() {
             hand.hand,
             "Palm below anchor. Infinite scroll down started.",
           );
+          setPreviewAction("Preview panel is scrolling down.");
         }
         return;
       }
@@ -327,9 +463,14 @@ function App() {
     if (detectedHands.some((hand) => hand.gestures.scroll.mode !== "idle")) {
       return;
     }
+    if (detectedHands.some((hand) => hand.gestures.zoom.mode !== "idle")) {
+      return;
+    }
 
     detectedHands.forEach((hand) => {
       if (hand.gestures.navigation.back) {
+        setPreviewPageIndex((index) => Math.max(0, index - 1));
+        setPreviewAction("Navigate back fired in preview.");
         emitVirtualEvent(
           "navigateBack",
           hand.hand,
@@ -339,6 +480,10 @@ function App() {
       }
 
       if (hand.gestures.navigation.forward) {
+        setPreviewPageIndex((index) =>
+          Math.min(PREVIEW_PAGES.length - 1, index + 1),
+        );
+        setPreviewAction("Navigate forward fired in preview.");
         emitVirtualEvent(
           "navigateForward",
           hand.hand,
@@ -357,6 +502,10 @@ function App() {
 
     return () => window.clearTimeout(timeoutId);
   }, [recentVirtualEvent]);
+
+  useEffect(() => {
+    previewRef.current?.scrollTo({ top: 0, behavior: "auto" });
+  }, [previewPageIndex]);
 
   // EFFECT 1: Handles camera authorization and ML initialization ONCE on mount
   useEffect(() => {
@@ -441,6 +590,7 @@ function App() {
       onData: (data) => {
         setHands(data);
         renderHandSkeleton(data);
+        handleZoomGestures(data);
         notifyPinchClicks(data);
         handleScrollGestures(data);
         notifyNavigationGestures(data);
@@ -464,7 +614,7 @@ function App() {
             checked={debugMode}
             onChange={(event) => setDebugMode(event.target.checked)}
           />
-          Debug mode
+          {debugMode ? "Debug mode" : "Preview mode"}
         </label>
       </header>
       {loading && <div className="loading-indicator">Loading ML Model...</div>}
@@ -492,7 +642,9 @@ function App() {
               style={{ width: videoSize.width, height: videoSize.height }}
             />
             {scrollModeGesture && (
-              <div className={`scroll-mode-indicator ${scrollModeGesture.mode}`}>
+              <div
+                className={`scroll-mode-indicator ${scrollModeGesture.mode}`}
+              >
                 <strong>
                   {scrollModeGesture.ready
                     ? "Scroll mode ready"
@@ -502,6 +654,24 @@ function App() {
                   {scrollModeGesture.ready
                     ? "Pinch to exit"
                     : `${scrollModeGesture.holdProgressMs}/1000 ms`}
+                </small>
+              </div>
+            )}
+            {zoomModeGesture && (
+              <div className={`zoom-mode-indicator ${zoomModeGesture.mode}`}>
+                <strong>
+                  {zoomModeGesture.ready
+                    ? "Zoom mode ready"
+                    : zoomModeGesture.waitingForPalms
+                      ? "Open both palms"
+                      : "Hold both hands"}
+                </strong>
+                <small>
+                  {zoomModeGesture.ready
+                    ? `Scale ${zoomModeGesture.scale.toFixed(2)} · pinch to exit`
+                    : zoomModeGesture.waitingForPalms
+                      ? `${zoomModeGesture.palmCount}/2 palms ready`
+                      : `${zoomModeGesture.holdProgressMs}/1000 ms`}
                 </small>
               </div>
             )}
@@ -541,7 +711,7 @@ function App() {
           </div>
         </div>
 
-        {debugMode && (
+        {debugMode ? (
           <div className="live-monitor" style={{ maxHeight: videoSize.height }}>
             <TrackerControls
               normalize={normalize}
@@ -553,6 +723,30 @@ function App() {
               Live API Data ({hands.length} hands):
             </h3>
             <pre className="code-block">{renderColoredPinchState(hands)}</pre>
+          </div>
+        ) : (
+          <div
+            className="preview-panel"
+            style={{ maxHeight: videoSize.height }}
+          >
+            <div className="preview-toolbar">
+              <strong>{PREVIEW_PAGES[previewPageIndex]}</strong>
+              <span>
+                Clicks: {previewClickCount} · Zoom:{" "}
+                {previewZoomScale.toFixed(2)}
+              </span>
+            </div>
+            <div className="preview-status">{previewStatus}</div>
+            <div
+              ref={previewRef}
+              className="preview-window"
+              style={{ fontSize: `${16 * previewZoomScale}px` }}
+            >
+              <h3>{PREVIEW_PAGES[previewPageIndex]}</h3>
+              {LOREM_PARAGRAPHS.map((paragraph) => (
+                <p key={paragraph}>{paragraph}</p>
+              ))}
+            </div>
           </div>
         )}
       </div>

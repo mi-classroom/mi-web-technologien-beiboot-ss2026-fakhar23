@@ -140,6 +140,38 @@
   font-size: 12px;
 }
 
+.zoom-mode-indicator {
+  position: absolute;
+  right: 16px;
+  bottom: 16px;
+  z-index: 21;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 170px;
+  padding: 8px 10px;
+  border: 2px solid #6610f2;
+  border-radius: 8px;
+  background: rgba(240, 232, 255, 0.94);
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.22);
+  color: #2c0b73;
+  pointer-events: none;
+}
+
+.zoom-mode-indicator.arming {
+  border-color: #ffc107;
+  background: rgba(255, 248, 225, 0.94);
+  color: #664d03;
+}
+
+.zoom-mode-indicator strong {
+  font-size: 13px;
+}
+
+.zoom-mode-indicator small {
+  font-size: 12px;
+}
+
 .virtual-event-hud {
   --event-color: #198754;
   position: absolute;
@@ -202,6 +234,26 @@
 .virtual-event-hud.click,
 .virtual-toast-icon.click {
   --event-color: #198754;
+}
+
+.virtual-event-hud.zoom-ready,
+.virtual-toast-icon.zoom-ready {
+  --event-color: #6610f2;
+}
+
+.virtual-event-hud.zoom-exit,
+.virtual-toast-icon.zoom-exit {
+  --event-color: #6c757d;
+}
+
+.virtual-event-hud.zoom-in,
+.virtual-toast-icon.zoom-in {
+  --event-color: #198754;
+}
+
+.virtual-event-hud.zoom-out,
+.virtual-toast-icon.zoom-out {
+  --event-color: #dc3545;
 }
 
 .virtual-event-hud.scroll-ready,
@@ -286,6 +338,56 @@
   padding: 15px;
   border-radius: 8px;
   border: 1px solid #dee2e6;
+}
+
+.preview-panel {
+  flex: 1;
+  min-width: 300px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  overflow: hidden;
+  background-color: #f8f9fa;
+  padding: 15px;
+  border-radius: 8px;
+  border: 1px solid #dee2e6;
+}
+
+.preview-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid #dee2e6;
+}
+
+.preview-status {
+  padding: 8px 10px;
+  border: 1px solid #ced4da;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #212529;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.preview-window {
+  min-height: 0;
+  overflow: auto;
+  padding: 12px;
+  border: 1px solid #ced4da;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.preview-window h3 {
+  margin-top: 0;
+}
+
+.preview-window p {
+  margin: 0 0 16px;
+  line-height: 1.55;
 }
 
 .code-block {
