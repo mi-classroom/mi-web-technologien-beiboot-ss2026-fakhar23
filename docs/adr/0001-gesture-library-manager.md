@@ -1,61 +1,31 @@
-# ADR 0001: Use a Gesture Library Manager with Registered Recognizers
+# ADR 0001: Gesture Library Manager
 
 ## Status
 
 Accepted
 
-## Context
-
-The first prototype placed pinch, scroll, and navigation logic in one detector
-function. That worked for the demo, but it made the code harder to extend:
-adding a new gesture meant editing the same central function and shared state
-object.
-
-Existing gesture libraries point toward a more systematic structure:
-
-- Fingerpose separates hand landmark input from gesture descriptions and
-  estimation.
-- ZingTouch exposes gestures as configurable units that application code binds
-  to behavior.
-- Hammer.js uses a manager that owns recognizers and exposes methods such as
-  add, remove, and event handling.
-
 ## Decision
 
-Use a `GestureLibrary` class as the manager for registered recognizers.
+Use `GestureLibrary` as a manager for registered gesture recognizers.
 
-Each recognizer implements:
+Each recognizer provides:
 
 - `name`
 - `createInitialState()`
 - `recognize(context, state)`
 
-The tracker owns the camera and TensorFlow model loop. The gesture library owns
-gesture recognition and per-hand recognizer state.
+Built-in gesture logic lives in separate files under `src/Core/gestures/`.
 
-Built-in recognizers are stored as one file per gesture under
-`src/Core/gestures/`:
+## Reason
 
-- `pinchGesture.ts`
-- `palmScrollGesture.ts`
-- `pinkyNavigationGesture.ts`
-
-The folder also exposes `gestures/index.ts` as an internal barrel. This keeps
-each gesture's thresholds, private state shape, and recognition helpers scoped
-to that gesture.
+The prototype had too much gesture logic in one detector function. A manager
+plus recognizers makes the core easier to extend and closer to libraries such
+as Fingerpose, ZingTouch, and Hammer.js.
 
 ## Consequences
 
-Positive:
-
-- New gestures can be registered without changing existing recognizers.
-- Gesture state is isolated per recognizer and per hand.
-- The React demo consumes high-level gesture results instead of raw recognition
-  internals.
-- The API is easier to document and test.
-
-Negative:
-
-- There is a little more structure than the prototype needed.
-- The built-in typed gesture result still needs a cast at the tracker boundary
-  because dynamic registration can return arbitrary gesture names.
+- New per-hand gestures can be registered without changing existing ones.
+- Recognizer state is isolated per hand and per gesture.
+- Zoom stays separate as a multi-hand controller because it compares two hands.
+- The tracker still needs a small cast because custom recognizers can return
+  dynamic result objects.

@@ -37,11 +37,15 @@ src/Core/
     pinchGesture.ts
     palmScrollGesture.ts
     pinkyNavigationGesture.ts
+    zoomGesture.ts
     index.ts
 ```
 
 Each built-in gesture lives in its own file. This keeps recognition logic,
 state, thresholds, and helper functions local to the gesture that needs them.
+`zoomGesture.ts` is implemented as a small multi-hand mode controller instead
+of a per-hand recognizer because it needs to compare two hands and stay active
+even if one hand temporarily leaves the camera frame.
 
 ## Public API
 
@@ -52,6 +56,9 @@ Creates a library instance with the built-in gestures:
 - `pinch`
 - `scroll`
 - `navigation`
+
+The camera tracker also adds a multi-hand `zoom` result after the per-hand
+recognizers have run.
 
 ```ts
 import { createDefaultGestureLibrary } from "../Core";
@@ -69,6 +76,9 @@ Options:
 - `scrollSpeedPx`: pixels per detection frame while infinite scroll is active.
 - `scrollDeadZone`: normalized distance above/below the scroll anchor where no
   scrolling happens.
+
+`createHandTracker()` additionally accepts `zoomDeadZone` for the multi-hand
+zoom mode used by the demo.
 
 ### `new GestureLibrary()`
 
@@ -156,6 +166,10 @@ Example result:
   "navigation": {
     "active": false,
     "direction": null
+  },
+  "zoom": {
+    "mode": "idle",
+    "scale": 1
   }
 }
 ```
@@ -231,13 +245,38 @@ It emits:
 ### Pinky navigation
 
 Uses horizontal X-axis extension of the little fingertip from the palm center.
-It must be held for about one second to arm a direction. A pinch from another
-hand confirms the armed direction and emits:
+The little finger must also be mostly horizontal, otherwise diagonal hand poses
+are ignored. It must be held for about one second to arm a direction. A pinch
+from another hand confirms the armed direction and emits:
 
 - `back`: one-frame virtual navigate-back event
 - `forward`: one-frame virtual navigate-forward event
 - `holdProgressMs`: hold progress toward the event
 - `pinkyExtensionX`: normalized horizontal extension
+
+### Two-hand zoom
+
+Uses the distance between two visible palm centers. When two hands are visible
+for about one second, zoom enters ready mode and stores the starting distance as
+the anchor. Moving the hands apart increases `scale`; moving them together
+decreases it. The demo maps that scale to the preview window font size.
+
+Zoom is modal: while it is arming or ready, scroll and pinky navigation are
+suppressed so only zoom runs. Zoom remains active if one or both hands leave the
+frame, and a pinch is the only exit gesture.
+
+It emits:
+
+- `mode`: `idle`, `arming`, or `ready`
+- `entered`: one-frame event when zoom becomes ready
+- `exited`: one-frame event when pinch exits zoom
+- `holdProgressMs`: progress toward the one-second ready threshold
+- `scale`: current zoom factor, clamped by the tracker
+- `zoomIn`: hands moved apart beyond the dead zone
+- `zoomOut`: hands moved together beyond the dead zone
+- `anchorDistance`: palm distance when zoom became ready
+- `distance`: current palm distance
+- `movement`: current distance minus anchor distance
 
 ## What stays internal
 
@@ -323,3 +362,23 @@ tracker.start({
   },
 });
 ```
+
+## Submission Notes
+
+Implemented gestures:
+
+- `pinch`
+- `scroll`
+- `navigation`
+- `zoom`
+
+Acceptance criteria coverage:
+
+- Gesture logic is encapsulated in `src/Core/`.
+- Demo-specific behavior is isolated in `src/UI/`.
+- Built-in gestures live in separate files under `src/Core/gestures/`.
+- New per-hand gestures can be registered with `GestureLibrary.registerGesture()`.
+- Public API usage is documented in this file.
+- Design decisions are documented in `docs/adr/`.
+
+Effort / timebox: **16 hours**.

@@ -5,9 +5,11 @@ import type { TrackedPinchGesture } from "../types";
 export const DEFAULT_PINCH_COOLDOWN_MS = 350;
 
 const PINCH_DISTANCE_THRESHOLD = 0.06;
+const PINCH_CLICK_HOLD_MS = 120;
 
 interface PinchGestureState {
-  previousPinchActive: boolean;
+  previousQualifiedPinchActive: boolean;
+  pinchStartTimeMs: number | null;
   lastClickTimeMs: number;
 }
 
@@ -17,7 +19,8 @@ export function createPinchGesture(
   return {
     name: "pinch",
     createInitialState: () => ({
-      previousPinchActive: false,
+      previousQualifiedPinchActive: false,
+      pinchStartTimeMs: null,
       lastClickTimeMs: -Infinity,
     }),
     recognize: (context, state) => {
@@ -27,16 +30,30 @@ export function createPinchGesture(
       );
       const active =
         pinchDistance !== null && pinchDistance < PINCH_DISTANCE_THRESHOLD;
-      const detectedStarted = active && !state.previousPinchActive;
-      const detectedReleased = !active && state.previousPinchActive;
-      const started = context.hasStableHistory && detectedStarted;
-      const released = context.hasStableHistory && detectedReleased;
+
+      if (active && state.pinchStartTimeMs === null) {
+        state.pinchStartTimeMs = context.currentTimeMs;
+      } else if (!active) {
+        state.pinchStartTimeMs = null;
+      }
+
+      // New/vanishing hands can produce one noisy close-distance frame. The
+      // click event only fires after a short stable pinch hold.
+      const qualifiedActive =
+        active &&
+        context.hasStableHistory &&
+        state.pinchStartTimeMs !== null &&
+        context.currentTimeMs - state.pinchStartTimeMs >= PINCH_CLICK_HOLD_MS;
+      const started =
+        qualifiedActive && !state.previousQualifiedPinchActive;
+      const released =
+        !qualifiedActive && state.previousQualifiedPinchActive;
       const click =
         started &&
         context.currentTimeMs - state.lastClickTimeMs >=
           Math.max(0, cooldownMs);
 
-      state.previousPinchActive = active;
+      state.previousQualifiedPinchActive = qualifiedActive;
       if (click) {
         state.lastClickTimeMs = context.currentTimeMs;
       }

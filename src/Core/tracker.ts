@@ -5,20 +5,13 @@ import {
   DEFAULT_PINCH_COOLDOWN_MS,
   createDefaultGestureLibrary,
 } from "./gestureDetector";
-import { formatCoordinate, getDistance3D, roundValue } from "./mathUtils";
+import {
+  DEFAULT_ZOOM_DEAD_ZONE,
+  createZoomModeController,
+} from "./gestures";
+import { formatCoordinate, roundValue } from "./mathUtils";
 import type { TrackerConfig, TrackedHand } from "./types";
 import type { GestureLibrary } from "./gestureLibrary";
-
-const ZOOM_READY_HOLD_MS = 1000;
-const DEFAULT_ZOOM_DEAD_ZONE = 0.08;
-const ZOOM_EXIT_PINCH_DISTANCE_THRESHOLD = 0.06;
-
-interface ZoomModeState {
-  openPalmStartTimeMs: number | null;
-  anchorDistance: number | null;
-  ready: boolean;
-  scale: number;
-}
 
 export type {
   GestureRecognizer,
@@ -36,8 +29,36 @@ export type {
   TrackedHandGestures,
   TrackedHandKeypoint,
   TrackedHandKeypoint3D,
+  TrackedNavigationGesture,
+  TrackedPinchGesture,
+  TrackedScrollGesture,
+  TrackedZoomGesture,
   TrackerConfig,
 } from "./types";
+
+function navigationIsWaitingForPinch(hands: TrackedHand[]): boolean {
+  return hands.some(
+    (hand) =>
+      hand.gestures.navigation.active &&
+      hand.gestures.navigation.direction !== null &&
+      hand.gestures.navigation.holdProgressMs >= 1000,
+  );
+}
+
+function muteScrollGesture(hand: TrackedHand): void {
+  hand.gestures.scroll = {
+    ...hand.gestures.scroll,
+    active: false,
+    mode: "idle",
+    ready: false,
+    entered: false,
+    exited: false,
+    holdProgressMs: 0,
+    direction: null,
+    toTop: false,
+    down: false,
+  };
+}
 
 // Factory function that creates and returns our headless tracking engine
 export function createHandTracker() {
@@ -46,13 +67,7 @@ export function createHandTracker() {
   let isRunning = false;
   let currentLoopId = 0;
   let gestureLibrary: GestureLibrary | null = null;
-  let zoomState: ZoomModeState = {
-    openPalmStartTimeMs: null,
-    anchorDistance: null,
-    ready: false,
-    scale: 1,
-  };
-  let previousZoomExitPinchActive = false;
+  const zoomModeController = createZoomModeController();
 
   // Loads the TensorFlow backend and compiles the MediaPipe ML model
   async function initialize(modelType: "lite" | "full" = "lite") {
@@ -92,13 +107,7 @@ export function createHandTracker() {
         scrollSpeedPx,
       });
     gestureLibrary.reset();
-    zoomState = {
-      openPalmStartTimeMs: null,
-      anchorDistance: null,
-      ready: false,
-      scale: 1,
-    };
-    previousZoomExitPinchActive = false;
+    zoomModeController.reset();
     currentLoopId++;
 
     const localLoopId = currentLoopId;
@@ -159,186 +168,23 @@ export function createHandTracker() {
           },
         );
 
-        const defaultZoomGesture = {
-          active: false,
-          mode: "idle" as const,
-          waitingForPalms: false,
-          ready: false,
-          entered: false,
-          exited: false,
-          holdProgressMs: 0,
-          palmCount: 0,
-          direction: null,
-          zoomIn: false,
-          zoomOut: false,
-          scale: zoomState.scale,
-          anchorDistance: null,
-          deadZone: roundValue(zoomDeadZone, precision) ?? zoomDeadZone,
-          distance: null,
-          movement: null,
-        };
-
-        formattedHands.forEach((hand) => {
-          hand.gestures.zoom = { ...defaultZoomGesture };
+        const zoomFrame = zoomModeController.apply({
+          estimatedHands,
+          formattedHands,
+          currentTimeMs,
+          videoWidth: videoElement.width,
+          videoHeight: videoElement.height,
+          precision,
+          deadZone: zoomDeadZone,
         });
 
-        const zoomExitPinchActive = estimatedHands.some((hand) => {
-          const pinchDistance = getDistance3D(
-            hand.keypoints3D?.[4],
-            hand.keypoints3D?.[8],
-          );
-
-          return (
-            pinchDistance !== null &&
-            pinchDistance < ZOOM_EXIT_PINCH_DISTANCE_THRESHOLD
-          );
-        });
-        const zoomExitRequested =
-          zoomState.ready &&
-          zoomExitPinchActive &&
-          !previousZoomExitPinchActive;
-        previousZoomExitPinchActive = zoomExitPinchActive;
-        const visiblePalmHands = estimatedHands
-          .map((hand, index) => ({
-            formattedHand: formattedHands[index],
-            palm: hand.keypoints[9],
-          }))
-          .filter(
-            ({ formattedHand, palm }) =>
-              formattedHand &&
-              palm?.x !== null &&
-              palm?.x !== undefined &&
-              palm?.y !== null &&
-              palm?.y !== undefined &&
-              Number.isFinite(palm.x) &&
-              Number.isFinite(palm.y),
-          );
-        const zoomPair = visiblePalmHands.slice(0, 2);
-        const firstPalm = zoomPair[0]?.palm;
-        const secondPalm = zoomPair[1]?.palm;
-        const hasTwoVisiblePalms = zoomPair.length >= 2;
-        const navigationWaitingForPinch = formattedHands.some(
-          (hand) =>
-            hand.gestures.navigation.active &&
-            hand.gestures.navigation.direction !== null &&
-            hand.gestures.navigation.holdProgressMs >= 1000,
-        );
-        const canArmZoom = hasTwoVisiblePalms && !navigationWaitingForPinch;
-        const zoomDistance =
-          hasTwoVisiblePalms && firstPalm && secondPalm
-            ? Math.hypot(
-                (firstPalm.x! - secondPalm.x!) / videoElement.width,
-                (firstPalm.y! - secondPalm.y!) / videoElement.height,
-              )
-            : null;
-        const wasZoomReady = zoomState.ready;
-
-        if (zoomExitRequested) {
-          zoomState = {
-            openPalmStartTimeMs: null,
-            anchorDistance: null,
-            ready: false,
-            scale: 1,
-          };
-        } else if (!zoomState.ready && canArmZoom) {
-          if (zoomState.openPalmStartTimeMs === null) {
-            zoomState.openPalmStartTimeMs = currentTimeMs;
-          }
-
-          if (currentTimeMs - zoomState.openPalmStartTimeMs >= ZOOM_READY_HOLD_MS) {
-            zoomState.ready = true;
-            zoomState.anchorDistance = zoomDistance;
-            zoomState.scale = 1;
-          }
-        } else if (!zoomState.ready) {
-          zoomState.openPalmStartTimeMs = null;
-        }
-
-        const zoomMovement =
-          zoomState.ready &&
-          zoomDistance !== null &&
-          zoomState.anchorDistance !== null
-            ? zoomDistance - zoomState.anchorDistance
-            : null;
-        const zoomDirection: "in" | "out" | null =
-          zoomMovement !== null && Math.abs(zoomMovement) >= zoomDeadZone
-            ? zoomMovement > 0
-              ? "in"
-              : "out"
-            : null;
-
-        if (
-          zoomState.ready &&
-          zoomDistance !== null &&
-          zoomState.anchorDistance !== null &&
-          zoomState.anchorDistance > 0
-        ) {
-          zoomState.scale = Math.max(
-            0.65,
-            Math.min(1.8, zoomDistance / zoomState.anchorDistance),
-          );
-        }
-
-        const zoomHoldProgressMs =
-          canArmZoom &&
-          zoomState.openPalmStartTimeMs !== null &&
-          !zoomState.ready
-            ? Math.min(
-                currentTimeMs - zoomState.openPalmStartTimeMs,
-                ZOOM_READY_HOLD_MS,
-              )
-            : zoomState.ready
-              ? ZOOM_READY_HOLD_MS
-              : 0;
-        const zoomMode = zoomState.ready
-          ? "ready" as const
-          : canArmZoom && !zoomExitRequested
-            ? "arming" as const
-            : "idle" as const;
-        const zoomGesture = {
-          active: zoomState.ready && zoomDirection !== null,
-          mode: zoomMode,
-          waitingForPalms: !zoomState.ready && !hasTwoVisiblePalms,
-          ready: zoomState.ready,
-          entered: !wasZoomReady && zoomState.ready,
-          exited: zoomExitRequested && wasZoomReady,
-          holdProgressMs: Math.round(zoomHoldProgressMs),
-          palmCount: visiblePalmHands.length,
-          direction: zoomDirection,
-          zoomIn: zoomState.ready && zoomDirection === "in",
-          zoomOut: zoomState.ready && zoomDirection === "out",
-          scale: roundValue(zoomState.scale, 2) ?? zoomState.scale,
-          anchorDistance:
-            roundValue(zoomState.anchorDistance, precision) ?? null,
-          deadZone: roundValue(zoomDeadZone, precision) ?? zoomDeadZone,
-          distance: roundValue(zoomDistance, precision) ?? null,
-          movement: roundValue(zoomMovement, precision) ?? null,
-        };
-
-        const zoomGestureTargets = zoomGesture.exited || zoomState.ready
-          ? formattedHands
-          : zoomPair.map(({ formattedHand }) => formattedHand);
-
-        zoomGestureTargets.forEach((hand) => {
-          hand.gestures.zoom = zoomGesture;
-        });
-
-        if (zoomMode !== "idle") {
+        if (zoomFrame.mode !== "idle") {
+          // Zoom is a modal two-hand gesture. While it is arming or ready, the
+          // single-hand recognizers are muted so scroll/pinky cannot leak through.
           activeGestureLibrary.reset();
 
           formattedHands.forEach((hand) => {
-            hand.gestures.scroll = {
-              ...hand.gestures.scroll,
-              active: false,
-              mode: "idle",
-              ready: false,
-              entered: false,
-              exited: false,
-              holdProgressMs: 0,
-              direction: null,
-              toTop: false,
-              down: false,
-            };
+            muteScrollGesture(hand);
             hand.gestures.navigation = {
               ...hand.gestures.navigation,
               active: false,
@@ -348,6 +194,10 @@ export function createHandTracker() {
               holdProgressMs: 0,
             };
           });
+        } else if (navigationIsWaitingForPinch(formattedHands)) {
+          // Navigation confirmation has priority over scroll: once pinky is
+          // armed, the second hand is expected to pinch, not start scroll mode.
+          formattedHands.forEach(muteScrollGesture);
         }
 
         const confirmingPinchHandIndex = formattedHands.findIndex(

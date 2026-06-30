@@ -1,39 +1,28 @@
-# ADR 0002: Keep UI Effects Outside Gesture Recognizers
+# ADR 0002: Keep UI Effects Outside Recognizers
 
 ## Status
 
 Accepted
 
-## Context
-
-The demo reacts to gestures with browser actions and visual feedback, for
-example scrolling the page or showing a toast. If recognizers performed those
-effects directly, the gesture code would only be useful for this specific React
-application.
-
-The issue asks for a library that can be used by others without reading or
-rewriting the demo application.
-
 ## Decision
 
-Gesture recognizers return plain result objects only. They do not call React,
-toast APIs, browser history, or DOM methods.
+Recognizers return plain gesture result objects only. They do not call React,
+toast APIs, browser history, scrolling APIs, or DOM methods.
 
-The demo application maps gesture results to UI behavior:
+The demo UI maps results to effects:
 
-- `pinch.click` becomes a virtual click toast.
-- `scroll.toTop` and `scroll.down` scroll the page and show a toast.
-- `navigation.back` and `navigation.forward` show a toast only.
+- `pinch.click` increments the preview click counter.
+- `scroll.toTop` / `scroll.down` scroll the preview panel.
+- `navigation.back` / `navigation.forward` change preview pages.
+- `zoom.scale` changes preview font size.
+
+## Reason
+
+The core should be reusable outside this React demo. Keeping effects in
+`src/UI/` makes `src/Core/` a portable gesture library.
 
 ## Consequences
 
-Positive:
-
-- The library can be reused in another UI, test, or application.
-- Gesture tests can assert returned data without needing a browser UI.
-- Application behavior can change without changing recognition logic.
-
-Negative:
-
-- The UI has to map gesture results to effects explicitly.
-- A new app must decide what each recognized gesture should do.
+- Gesture logic can be tested as data.
+- Another app can reuse the core and choose different UI behavior.
+- The demo must explicitly map gesture results to visual effects.

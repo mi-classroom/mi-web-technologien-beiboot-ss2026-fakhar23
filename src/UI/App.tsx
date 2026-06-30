@@ -181,6 +181,7 @@ function App() {
   const [previewPageIndex, setPreviewPageIndex] = useState(0);
   const [previewStatus, setPreviewStatus] = useState("No virtual event yet.");
   const [previewClickCount, setPreviewClickCount] = useState(0);
+  const [previewZoomScale, setPreviewZoomScale] = useState(1);
 
   // Dynamic Resolution State (defaults to 640x480 until the hardware camera is analyzed)
   const [videoSize, setVideoSize] = useState({ width: 640, height: 480 });
@@ -197,7 +198,6 @@ function App() {
   const zoomModeGesture =
     liveZoomGesture ??
     (stickyZoomGesture?.mode !== "idle" ? stickyZoomGesture : undefined);
-  const previewZoomScale = zoomModeGesture?.ready ? zoomModeGesture.scale : 1;
   const navigationHoldGesture = hands.find(
     (hand) =>
       hand.gestures.scroll.mode === "idle" &&
@@ -360,6 +360,7 @@ function App() {
     if (zoomGesture.exited) {
       activeZoomDirectionRef.current = null;
       setStickyZoomGesture(null);
+      setPreviewZoomScale(1);
       emitVirtualEvent(
         "zoomExit",
         undefined,
@@ -369,6 +370,7 @@ function App() {
     }
 
     setStickyZoomGesture(zoomGesture);
+    setPreviewZoomScale(zoomGesture.ready ? zoomGesture.scale : 1);
 
     if (zoomGesture.entered) {
       emitVirtualEvent(

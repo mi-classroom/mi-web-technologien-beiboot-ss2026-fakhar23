@@ -53,6 +53,8 @@ function getPinkyNavigationDirection(
   const verticalMovement = Math.abs(pinkyTip.y - palmCenter.y);
   const pinkyBoneX = Math.abs(pinkyTip.x - pinkyBase.x);
   const pinkyBoneY = Math.abs(pinkyTip.y - pinkyBase.y);
+  // Require both a sideways hand pose and a mostly horizontal pinky bone;
+  // this avoids arming navigation when the little finger is merely extended.
   const isPointingSideways = horizontalMovement > verticalMovement * 1.25;
   const isPinkyHorizontal = pinkyBoneX > pinkyBoneY * PINKY_HORIZONTAL_RATIO;
 

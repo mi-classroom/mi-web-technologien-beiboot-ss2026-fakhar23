@@ -7,3 +7,7 @@ export {
   type PalmScrollGestureOptions,
 } from "./palmScrollGesture";
 export { createPinkyNavigationGesture } from "./pinkyNavigationGesture";
+export {
+  DEFAULT_ZOOM_DEAD_ZONE,
+  createZoomModeController,
+} from "./zoomGesture";
