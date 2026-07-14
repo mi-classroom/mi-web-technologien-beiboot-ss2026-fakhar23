@@ -1,121 +1,117 @@
-# Sprint 3: Gesture Library
+# Sprint 4: Gesture Library
+
+# Sprint 4: Library Application Test
 
 ## Goal
 
-Issue #3 asks to turn the prototype gestures from Issue #2 into a structured
-gesture library that is reusable, extensible, documented, and separated from
-the React demo application.
+Issue #4 asks us to use the gesture library as if it were an external
+dependency. The app should communicate with the library only through the public
+API and should reveal what is missing or awkward in that API.
 
-The implementation now keeps reusable gesture logic in `src/Core/` and demo UI
-behavior in `src/UI/`.
+## Demo Application
 
-## Implemented Gestures
+Topic: **Accessible UI controls for a static page**
 
-| Gesture          | Action                       | Core file                                     | Notes                                                                                                   |
-| ---------------- | ---------------------------- | --------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
-| Pinch            | Virtual click / confirmation | `src/Core/gestures/pinchGesture.ts`           | Uses 3D thumb-index distance and a short hold gate to avoid noisy clicks.                               |
-| Palm scroll      | Continuous scroll up/down    | `src/Core/gestures/palmScrollGesture.ts`      | Requires a clear screen-facing open palm, then tracks movement from an anchor with a dead zone.         |
-| Pinky navigation | Navigate back/forward        | `src/Core/gestures/pinkyNavigationGesture.ts` | Requires a mostly horizontal pinky hold for one second, then confirmation by pinch from the other hand. |
-| Two-hand zoom    | Zoom in/out                  | `src/Core/gestures/zoomGesture.ts`            | Uses two palm centers, a one-second ready timer, anchor distance, and a dead zone.                      |
+The existing preview mode is now used as the standalone demo application. It
+imports from the public API only:
 
-## Implemented Virtual Actions
-
-The demo exposes seven concrete virtual actions. Some actions share the same
-mode gesture, for example scroll up/down both happen inside scroll mode.
-
-| Virtual action   | How to perform it                                                                                                                     | What happens in preview mode                                                 |
-| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
-| Click            | Pinch thumb and index finger together briefly.                                                                                        | The click counter increases and a virtual click toast appears.               |
-| Scroll up        | Hold one clear open palm toward the camera for about one second to enter scroll mode. Then move the palm above the anchor position.   | The preview document scrolls upward continuously.                            |
-| Scroll down      | Hold one clear open palm toward the camera for about one second to enter scroll mode. Then move the palm below the anchor position.   | The preview document scrolls downward continuously.                          |
-| Navigate back    | Point the little finger mostly horizontally to the left and hold it for about one second. Then pinch with the other hand to confirm.  | The preview changes to the previous page.                                    |
-| Navigate forward | Point the little finger mostly horizontally to the right and hold it for about one second. Then pinch with the other hand to confirm. | The preview changes to the next page.                                        |
-| Zoom in          | Hold two visible hands in frame for about one second to enter zoom mode. Then move the hands farther apart.                           | The preview text becomes larger and the zoom number increases above `1.00`.  |
-| Zoom out         | Hold two visible hands in frame for about one second to enter zoom mode. Then move the hands closer together.                         | The preview text becomes smaller and the zoom number decreases below `1.00`. |
-
-Mode exits:
-
-- Scroll mode exits with a pinch.
-- Zoom mode exits with a short deliberate pinch hold and resets the preview zoom
-  value to `1.00`.
-- Pinky navigation does not execute until the other hand confirms with a pinch.
-
-## Library Structure
-
-```txt
-src/Core/
-  index.ts                 public API barrel
-  tracker.ts               TensorFlow/camera adapter and multi-hand coordination
-  gestureLibrary.ts        manager, recognizer contract, per-hand state
-  gestureDetector.ts       default library factory
-  gestureUtils.ts          shared landmark helpers
-  gestures/
-    pinchGesture.ts
-    palmScrollGesture.ts
-    pinkyNavigationGesture.ts
-    zoomGesture.ts
-    index.ts
-
-src/UI/
-  App.tsx                  demo application and preview/debug UI
+```ts
+import { createHandTracker, getGestureEvents, type TrackedHand } from "../Core";
 ```
 
-The reusable library code does not call React, `window.history`, toast APIs, or
-DOM methods. It returns plain gesture result objects. The UI decides how those
-results are shown or used.
+It does not import from internal files such as `src/Core/gestures/`,
+`gestureUtils`, or `gestureLibrary`.
 
-## Public API
+## How To Start
 
-The public API is exported from `src/Core/index.ts`.
+```bash
+pnpm install
+pnpm run dev
+```
 
-Main entry points:
+Open the app in the browser and use **Preview mode**. Debug mode can still be
+enabled to inspect raw tracking data.
 
-- `createHandTracker()`: creates the TensorFlow camera tracker used by the demo.
-- `createDefaultGestureLibrary(options?)`: creates a library with built-in
-  per-hand recognizers.
-- `new GestureLibrary()`: creates an empty gesture library.
-- `registerGesture(recognizer)`: adds a custom gesture recognizer.
-- `evaluateHand(context)`: evaluates all registered recognizers for one hand.
-- `pruneInactiveHands(activeHandIds)`: removes state for hands that left frame.
-- `reset()`: clears internal recognizer state.
+## Gesture Controls In The Demo
 
-More detail and examples are documented in
-[`docs/gesture-library.md`](./docs/gesture-library.md).
+| User action   | Gesture                                                       | App behavior                                     |
+| ------------- | ------------------------------------------------------------- | ------------------------------------------------ |
+| Click         | Pinch thumb and index finger                                  | Increments the click counter                     |
+| Scroll        | Hold one open palm for one second, then move palm up/down     | Infinite scroll in the preview page              |
+| Exit scroll   | Pinch while in scroll mode                                    | Leaves scroll mode                               |
+| Next page     | Point pinky right for one second, then pinch with other hand  | Moves to the next letter page                    |
+| Previous page | Point pinky left for one second, then pinch with other hand   | Moves to the previous letter page                |
+| Zoom text     | Hold two hands for one second, then move hands apart/together | Resizes the preview text                         |
+| Exit zoom     | Short deliberate pinch while in zoom mode                     | Leaves zoom mode but keeps the current text size |
 
-## Extensibility
+The pages are labeled `A` through `Z`. Navigation wraps from `Z` back to `A`
+and from `A` back to `Z`.
 
-New per-hand gestures can be added without changing the existing recognizers:
+## API Problem Found
 
-1. Create a new file in `src/Core/gestures/`.
-2. Export a recognizer with `name`, `createInitialState`, and `recognize`.
-3. Register it using `gestureLibrary.registerGesture()`.
-4. Consume the returned result object in the UI or another application.
+The first version of the app used the public tracker result, but the app code
+still had to inspect nested low-level state:
 
-Multi-hand gestures can use a small controller like `zoomGesture.ts` when they
-need to compare multiple hands or coordinate modal state.
+```ts
+hands[].gestures.navigation.forward
+hands[].gestures.scroll.down
+hands[].gestures.zoom.zoomIn
+```
 
-## Demo Behavior
+This was technically public, but not ergonomic. A normal app wants virtual
+events such as `navigateForward`, `scrollDown`, or `click`, not detailed
+recognizer state.
 
-The demo has two modes:
+## API Fix
 
-- Debug mode: shows live gesture JSON and controls.
-- Preview mode: provides a scrollable preview document.
+Added a public helper:
 
-Virtual events are visible in the preview:
+```ts
+getGestureEvents(hands);
+```
 
-- Pinch increments the preview click counter.
-- Palm scroll scrolls the preview window.
-- Pinky navigation changes preview pages.
-- Zoom changes the preview font size.
+This converts tracked hand data into simple event objects:
 
-## Design Decisions
+- `click`
+- `scrollUp`
+- `scrollDown`
+- `navigateBack`
+- `navigateForward`
+- `zoomReady`
+- `zoomExit`
+- `zoomIn`
+- `zoomOut`
 
-Decision records are stored in `docs/adr/`:
+The preview app now uses this helper for its main virtual actions.
 
-- [`ADR 0001`](./docs/adr/0001-gesture-library-manager.md): use a gesture library manager with registered recognizers.
-- [`ADR 0002`](./docs/adr/0002-keep-ui-effects-outside-recognizers.md): keep UI effects outside recognizers.
-- [`ADR 0003`](./docs/adr/0003-use-modal-priority-for-conflicting-gestures.md): use modal priority for conflicting gestures.
+Decision record: [`ADR 0004`](./adr/0004-add-gesture-event-adapter.md)
 
-## Effort / Time
+## Other Improvements Made While Testing The App
 
-Timebox / effort: **16 hours**.
+- Improved the interactive preview into a clearer static-page demo.
+- Added A-Z page navigation with wraparound.
+- Added light background colors for each page letter.
+- Added sticky mode instructions inside the preview page:
+  - scroll mode explains palm up/down and pinch-to-exit
+  - zoom mode explains hand distance and pinch-to-exit
+  - pinky navigation explains pinch-to-confirm
+- Fixed zoom scale persistence:
+  - exiting zoom no longer resets preview zoom to `1.00`
+  - re-entering zoom starts from the current preview zoom level
+  - hands leaving and re-entering during zoom no longer reset zoom
+- Fixed the zoom number mismatch between the camera overlay and preview toolbar.
+
+## Acceptance Criteria Check
+
+| Criterion                                 | Status                                                  |
+| ----------------------------------------- | ------------------------------------------------------- |
+| Demo app is functional                    | Done: preview mode controls a static page with gestures |
+| Uses only public library API              | Done: app imports from `../Core`                        |
+| At least one API problem found and fixed  | Done: added `getGestureEvents(hands)`                   |
+| API change explained in a Decision Record | Done: ADR 0004                                          |
+| Application can be started locally        | Done: `pnpm run dev`                                    |
+| Application is checked into repository    | Done when committed                                     |
+
+## Effort
+
+Timebox / effort: **8-10 hours**.

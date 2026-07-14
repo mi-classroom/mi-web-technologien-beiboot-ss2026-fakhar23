@@ -11,6 +11,7 @@ const ZOOM_EXIT_PINCH_HOLD_MS = 180;
 interface ZoomModeState {
   openPalmStartTimeMs: number | null;
   anchorDistance: number | null;
+  anchorScale: number;
   ready: boolean;
   scale: number;
 }
@@ -33,6 +34,7 @@ function createInitialZoomState(): ZoomModeState {
   return {
     openPalmStartTimeMs: null,
     anchorDistance: null,
+    anchorScale: 1,
     ready: false,
     scale: 1,
   };
@@ -167,10 +169,22 @@ export function createZoomModeController() {
         if (currentTimeMs - state.openPalmStartTimeMs >= ZOOM_READY_HOLD_MS) {
           state.ready = true;
           state.anchorDistance = zoomDistance;
-          state.scale = 1;
+          state.anchorScale = state.scale;
         }
       } else if (!state.ready) {
         state.openPalmStartTimeMs = null;
+      }
+
+      if (state.ready && zoomDistance === null) {
+        state.anchorDistance = null;
+        state.anchorScale = state.scale;
+      } else if (
+        state.ready &&
+        zoomDistance !== null &&
+        state.anchorDistance === null
+      ) {
+        state.anchorDistance = zoomDistance;
+        state.anchorScale = state.scale;
       }
 
       const movement =
@@ -192,7 +206,7 @@ export function createZoomModeController() {
       ) {
         state.scale = Math.max(
           0.65,
-          Math.min(1.8, zoomDistance / state.anchorDistance),
+          Math.min(1.8, state.anchorScale * (zoomDistance / state.anchorDistance)),
         );
       }
 

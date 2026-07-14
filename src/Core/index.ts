@@ -3,6 +3,7 @@ export {
   createDefaultGestureLibrary,
   GestureLibrary,
 } from "./tracker";
+export { getGestureEvents } from "./gestureEvents";
 export {
   DEFAULT_PINCH_COOLDOWN_MS,
   DEFAULT_ZOOM_DEAD_ZONE,
@@ -12,6 +13,10 @@ export {
   createZoomModeController,
 } from "./gestures";
 
+export type {
+  GestureEvent,
+  GestureEventKind,
+} from "./gestureEvents";
 export type {
   GestureRecognizer,
   GestureRecognizerContext,

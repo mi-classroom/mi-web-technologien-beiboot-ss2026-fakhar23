@@ -5,6 +5,7 @@ import "./App.css";
 import TrackerControls from "./TrackerControls";
 import {
   createHandTracker,
+  getGestureEvents,
   type TrackedHand,
   type TrackedHandKeypoint,
 } from "../Core";
@@ -21,16 +22,31 @@ const SKELETON_RENDER_CONFIG = {
   pinky: { path: [0, 17, 18, 19, 20], color: "pink" },
 };
 
-const PREVIEW_PAGES = ["Preview page A", "Preview page B", "Preview page C"];
+const PREVIEW_TITLE = "Accessible UI controls for a static page";
+const PREVIEW_PAGES = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
+const PREVIEW_COLORS = [
+  "#fef3c7",
+  "#dcfce7",
+  "#dbeafe",
+  "#fce7f3",
+  "#ede9fe",
+  "#cffafe",
+  "#ffedd5",
+  "#ecfccb",
+];
 
-const LOREM_PARAGRAPHS = Array.from(
-  { length: 14 },
-  (_, index) =>
-    `Lorem ipsum section ${index + 1}. Gesture testing needs a long scrollable ` +
-    "surface, so this preview window contains repeated readable text. Move your " +
-    "open palm above or below the scroll anchor to scroll this panel, pinch to " +
-    "emit a virtual click, and use pinky navigation to change the preview page.",
-);
+const PREVIEW_INSTRUCTIONS = [
+  "👋 This preview is a small app using the gesture library only through the public Core API.",
+  "🤏 Pinch your thumb and index finger to trigger a virtual click. The click counter in the toolbar increases.",
+  "🖐️ Hold one clear open palm for about one second to enter scroll mode. Then move your palm up or down for infinite scroll. Pinch to exit scroll mode.",
+  "👈 Point your pinky left for one second, then pinch with the other hand to go to the previous letter page.",
+  "👉 Point your pinky right for one second, then pinch with the other hand to go to the next letter page.",
+  "🔎 Hold two hands in frame for one second to enter zoom mode. Move hands apart or together to resize this text.",
+  "✅ The app code imports from ../Core only. It does not import internal gesture files.",
+  "♿ The goal is to test accessible controls for a static page: click, scroll, navigation, and text zoom.",
+  "🧪 Use Debug mode when you want to inspect the raw gesture result JSON.",
+  "🚪 Pinch exits scroll mode and zoom mode when those modes are active.",
+];
 
 type VirtualEventKind =
   | "click"
@@ -168,6 +184,8 @@ function App() {
   const trackerRef = useRef<ReturnType<typeof createHandTracker> | null>(null);
   const activeScrollDirectionRef = useRef<"up" | "down" | null>(null);
   const activeZoomDirectionRef = useRef<"in" | "out" | null>(null);
+  const zoomSessionBaseScaleRef = useRef(1);
+  const previewZoomScaleRef = useRef(1);
 
   // Core application tracking states
   const [loading, setLoading] = useState(true);
@@ -197,7 +215,10 @@ function App() {
   )?.gestures.zoom;
   const zoomModeGesture =
     liveZoomGesture ??
-    (stickyZoomGesture?.mode !== "idle" ? stickyZoomGesture : undefined);
+    (stickyZoomGesture?.ready ? stickyZoomGesture : undefined);
+  const showZoomModeGesture =
+    zoomModeGesture &&
+    (zoomModeGesture.ready || (liveZoomGesture && liveZoomGesture.palmCount >= 2));
   const navigationHoldGesture = hands.find(
     (hand) =>
       hand.gestures.scroll.mode === "idle" &&
@@ -205,6 +226,18 @@ function App() {
       hand.gestures.navigation.active,
   )?.gestures.navigation;
   const navigationReady = (navigationHoldGesture?.holdProgressMs ?? 0) >= 1000;
+  const previewHint =
+    scrollModeGesture?.ready
+      ? "🖐️ Scroll mode active: move your palm up or down for infinite scroll. Pinch to exit scroll mode."
+      : zoomModeGesture?.ready
+        ? "🔎 Zoom mode active: move both hands apart/together to resize text. Pinch to exit zoom mode."
+        : zoomModeGesture?.mode === "arming"
+          ? `🔎 Hold both hands steady to enter zoom mode: ${zoomModeGesture.holdProgressMs}/1000 ms.`
+      : navigationReady && navigationHoldGesture?.direction === "back"
+        ? "👈 Ready to go back: pinch with your other hand to confirm going to the previous page."
+        : navigationReady && navigationHoldGesture?.direction === "forward"
+          ? "👉 Ready to go forward: pinch with your other hand to confirm going to the next page."
+          : null;
 
   const emitVirtualEvent = (
     kind: VirtualEventKind,
@@ -234,6 +267,11 @@ function App() {
         color: "#17202a",
       },
     });
+  };
+
+  const setPreviewZoomScaleValue = (scale: number) => {
+    previewZoomScaleRef.current = scale;
+    setPreviewZoomScale(scale);
   };
 
   const setPreviewAction = (message: string) => {
@@ -318,30 +356,13 @@ function App() {
   };
 
   const notifyPinchClicks = (detectedHands: TrackedHand[]) => {
-    const navigationConfirmed = detectedHands.some(
-      (hand) =>
-        hand.gestures.navigation.back || hand.gestures.navigation.forward,
-    );
-    const zoomActiveOrExited = detectedHands.some(
-      (hand) => hand.gestures.zoom.mode !== "idle" || hand.gestures.zoom.exited,
-    );
-
-    detectedHands.forEach((hand) => {
-      if (
-        !hand.gestures.pinch.click ||
-        navigationConfirmed ||
-        zoomActiveOrExited ||
-        hand.gestures.scroll.exited ||
-        hand.gestures.navigation.back ||
-        hand.gestures.navigation.forward
-      ) {
-        return;
-      }
+    getGestureEvents(detectedHands).forEach((event) => {
+      if (event.kind !== "click") return;
 
       emitVirtualEvent(
         "click",
-        hand.hand,
-        "Pinch gesture emitted a virtual click.",
+        event.hand,
+        event.detail,
       );
       setPreviewClickCount((count) => count + 1);
       setPreviewAction("Virtual click fired in preview.");
@@ -360,23 +381,36 @@ function App() {
     if (zoomGesture.exited) {
       activeZoomDirectionRef.current = null;
       setStickyZoomGesture(null);
-      setPreviewZoomScale(1);
-      emitVirtualEvent(
-        "zoomExit",
-        undefined,
-        "Pinch returned control to normal gesture mode.",
+      const event = getGestureEvents(detectedHands).find(
+        (item) => item.kind === "zoomExit",
       );
+      emitVirtualEvent("zoomExit", event?.hand, event?.detail ?? "Zoom exited.");
       return;
     }
 
     setStickyZoomGesture(zoomGesture);
-    setPreviewZoomScale(zoomGesture.ready ? zoomGesture.scale : 1);
 
     if (zoomGesture.entered) {
+      zoomSessionBaseScaleRef.current = previewZoomScaleRef.current;
+    }
+
+    if (zoomGesture.ready) {
+      setPreviewZoomScaleValue(
+        Math.max(
+          0.65,
+          Math.min(1.8, zoomSessionBaseScaleRef.current * zoomGesture.scale),
+        ),
+      );
+    }
+
+    if (zoomGesture.entered) {
+      const event = getGestureEvents(detectedHands).find(
+        (item) => item.kind === "zoomReady",
+      );
       emitVirtualEvent(
         "zoomReady",
-        undefined,
-        "Both palms held for one second. Pinch to exit.",
+        event?.hand,
+        event?.detail ?? "Both palms held for one second. Pinch to exit.",
       );
       return;
     }
@@ -384,7 +418,10 @@ function App() {
     if (zoomGesture.zoomIn) {
       if (activeZoomDirectionRef.current !== "in") {
         activeZoomDirectionRef.current = "in";
-        emitVirtualEvent("zoomIn", undefined, "Hands moved apart.");
+        const event = getGestureEvents(detectedHands).find(
+          (item) => item.kind === "zoomIn",
+        );
+        emitVirtualEvent("zoomIn", event?.hand, event?.detail ?? "Hands moved apart.");
       }
       return;
     }
@@ -392,7 +429,10 @@ function App() {
     if (zoomGesture.zoomOut) {
       if (activeZoomDirectionRef.current !== "out") {
         activeZoomDirectionRef.current = "out";
-        emitVirtualEvent("zoomOut", undefined, "Hands moved together.");
+        const event = getGestureEvents(detectedHands).find(
+          (item) => item.kind === "zoomOut",
+        );
+        emitVirtualEvent("zoomOut", event?.hand, event?.detail ?? "Hands moved together.");
       }
       return;
     }
@@ -409,32 +449,41 @@ function App() {
 
     detectedHands.forEach((hand) => {
       if (hand.gestures.scroll.exited) {
+        const event = getGestureEvents(detectedHands).find(
+          (item) => item.kind === "scrollExit",
+        );
         activeScrollDirectionRef.current = null;
         emitVirtualEvent(
           "scrollExit",
-          hand.hand,
-          "Pinch returned control to normal gesture mode.",
+          event?.hand,
+          event?.detail ?? "Pinch returned control to normal gesture mode.",
         );
         return;
       }
 
       if (hand.gestures.scroll.entered) {
+        const event = getGestureEvents(detectedHands).find(
+          (item) => item.kind === "scrollReady",
+        );
         emitVirtualEvent(
           "scrollReady",
-          hand.hand,
-          "Open palm held for one second. Pinch to exit.",
+          event?.hand,
+          event?.detail ?? "Open palm held for one second. Pinch to exit.",
         );
         return;
       }
 
       if (hand.gestures.scroll.toTop) {
-        scrollPreviewBy(-hand.gestures.scroll.scrollSpeedPx);
+        const event = getGestureEvents(detectedHands).find(
+          (item) => item.kind === "scrollUp",
+        );
+        scrollPreviewBy(-(event?.scrollSpeedPx ?? hand.gestures.scroll.scrollSpeedPx));
         if (activeScrollDirectionRef.current !== "up") {
           activeScrollDirectionRef.current = "up";
           emitVirtualEvent(
             "scrollTop",
-            hand.hand,
-            "Palm above anchor. Infinite scroll up started.",
+            event?.hand,
+            event?.detail ?? "Palm above anchor. Infinite scroll up started.",
           );
           setPreviewAction("Preview panel is scrolling up.");
         }
@@ -442,13 +491,16 @@ function App() {
       }
 
       if (hand.gestures.scroll.down) {
-        scrollPreviewBy(hand.gestures.scroll.scrollSpeedPx);
+        const event = getGestureEvents(detectedHands).find(
+          (item) => item.kind === "scrollDown",
+        );
+        scrollPreviewBy(event?.scrollSpeedPx ?? hand.gestures.scroll.scrollSpeedPx);
         if (activeScrollDirectionRef.current !== "down") {
           activeScrollDirectionRef.current = "down";
           emitVirtualEvent(
             "scrollDown",
-            hand.hand,
-            "Palm below anchor. Infinite scroll down started.",
+            event?.hand,
+            event?.detail ?? "Palm below anchor. Infinite scroll down started.",
           );
           setPreviewAction("Preview panel is scrolling down.");
         }
@@ -469,27 +521,29 @@ function App() {
       return;
     }
 
-    detectedHands.forEach((hand) => {
-      if (hand.gestures.navigation.back) {
-        setPreviewPageIndex((index) => Math.max(0, index - 1));
+    getGestureEvents(detectedHands).forEach((event) => {
+      if (event.kind === "navigateBack") {
+        setPreviewPageIndex((index) =>
+          index === 0 ? PREVIEW_PAGES.length - 1 : index - 1,
+        );
         setPreviewAction("Navigate back fired in preview.");
         emitVirtualEvent(
           "navigateBack",
-          hand.hand,
-          "Little finger held pointing left.",
+          event.hand,
+          event.detail,
         );
         return;
       }
 
-      if (hand.gestures.navigation.forward) {
+      if (event.kind === "navigateForward") {
         setPreviewPageIndex((index) =>
-          Math.min(PREVIEW_PAGES.length - 1, index + 1),
+          index === PREVIEW_PAGES.length - 1 ? 0 : index + 1,
         );
         setPreviewAction("Navigate forward fired in preview.");
         emitVirtualEvent(
           "navigateForward",
-          hand.hand,
-          "Little finger held pointing right.",
+          event.hand,
+          event.detail,
         );
       }
     });
@@ -659,7 +713,7 @@ function App() {
                 </small>
               </div>
             )}
-            {zoomModeGesture && (
+            {showZoomModeGesture && (
               <div className={`zoom-mode-indicator ${zoomModeGesture.mode}`}>
                 <strong>
                   {zoomModeGesture.ready
@@ -670,7 +724,7 @@ function App() {
                 </strong>
                 <small>
                   {zoomModeGesture.ready
-                    ? `Scale ${zoomModeGesture.scale.toFixed(2)} · pinch to exit`
+                    ? `Scale ${previewZoomScale.toFixed(2)} · pinch to exit`
                     : zoomModeGesture.waitingForPalms
                       ? `${zoomModeGesture.palmCount}/2 palms ready`
                       : `${zoomModeGesture.holdProgressMs}/1000 ms`}
@@ -732,7 +786,9 @@ function App() {
             style={{ maxHeight: videoSize.height }}
           >
             <div className="preview-toolbar">
-              <strong>{PREVIEW_PAGES[previewPageIndex]}</strong>
+              <strong>
+                {PREVIEW_TITLE}. {PREVIEW_PAGES[previewPageIndex]}
+              </strong>
               <span>
                 Clicks: {previewClickCount} · Zoom:{" "}
                 {previewZoomScale.toFixed(2)}
@@ -742,10 +798,17 @@ function App() {
             <div
               ref={previewRef}
               className="preview-window"
-              style={{ fontSize: `${16 * previewZoomScale}px` }}
+              style={{
+                backgroundColor:
+                  PREVIEW_COLORS[previewPageIndex % PREVIEW_COLORS.length],
+                fontSize: `${16 * previewZoomScale}px`,
+              }}
             >
-              <h3>{PREVIEW_PAGES[previewPageIndex]}</h3>
-              {LOREM_PARAGRAPHS.map((paragraph) => (
+              <h3>
+                {PREVIEW_TITLE}. {PREVIEW_PAGES[previewPageIndex]}
+              </h3>
+              {previewHint && <p className="preview-hint">{previewHint}</p>}
+              {PREVIEW_INSTRUCTIONS.map((paragraph) => (
                 <p key={paragraph}>{paragraph}</p>
               ))}
             </div>

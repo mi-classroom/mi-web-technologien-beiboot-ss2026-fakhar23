@@ -20,6 +20,7 @@ Our library uses the same broad idea in a smaller form:
 - `GestureRecognizer` is the extension point.
 - `createDefaultGestureLibrary()` registers the built-in recognizers.
 - `createHandTracker()` is the camera/model adapter used by the demo.
+- `getGestureEvents()` maps detailed gesture state to app-level events.
 
 ## File structure
 
@@ -189,6 +190,36 @@ Clears all per-hand recognizer state.
 ```ts
 gestureLibrary.reset();
 ```
+
+### `getGestureEvents(hands)`
+
+Converts low-level tracked hand results into app-friendly virtual events. This
+is useful for applications that do not want to manually inspect nested fields
+such as `hands[].gestures.navigation.forward`.
+
+```ts
+import { getGestureEvents } from "../Core";
+
+const events = getGestureEvents(hands);
+
+events.forEach((event) => {
+  if (event.kind === "navigateForward") {
+    goToNextPage();
+  }
+});
+```
+
+Example event kinds:
+
+- `click`
+- `scrollUp`
+- `scrollDown`
+- `navigateBack`
+- `navigateForward`
+- `zoomReady`
+- `zoomExit`
+- `zoomIn`
+- `zoomOut`
 
 ## Built-in gestures
 
