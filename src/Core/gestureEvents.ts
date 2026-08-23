@@ -4,6 +4,7 @@ export type GestureEventKind =
   | "click"
   | "scrollReady"
   | "scrollExit"
+  | "palmMove"
   | "scrollUp"
   | "scrollDown"
   | "navigateBack"
@@ -19,6 +20,8 @@ export interface GestureEvent {
   detail: string;
   scrollSpeedPx?: number;
   zoomScale?: number;
+  movementX?: number | null;
+  movementY?: number | null;
 }
 
 export function getGestureEvents(hands: TrackedHand[]): GestureEvent[] {
@@ -93,7 +96,17 @@ export function getGestureEvents(hands: TrackedHand[]): GestureEvent[] {
       events.push({
         kind: "scrollReady",
         hand: hand.hand,
-        detail: "Open palm held for one second. Pinch to exit.",
+        detail: "Open palm held for one second. Pinch to exit, or move hand out of frame.",
+      });
+    }
+
+    if (hand.gestures.scroll.ready) {
+      events.push({
+        kind: "palmMove",
+        hand: hand.hand,
+        detail: "Open palm moved relative to the scroll-mode anchor.",
+        movementX: hand.gestures.scroll.movementX,
+        movementY: hand.gestures.scroll.movementY,
       });
     }
 

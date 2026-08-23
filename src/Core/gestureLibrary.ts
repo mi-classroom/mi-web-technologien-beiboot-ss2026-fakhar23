@@ -10,6 +10,7 @@ export interface GestureRecognizerContext {
   precision: number | undefined;
   observedFrameCount: number;
   hasStableHistory: boolean;
+  timeSincePreviousObservationMs: number;
   recognizedGestures: Record<string, unknown>;
 }
 
@@ -37,6 +38,7 @@ export class GestureLibrary {
   private recognizers = new Map<string, RegisteredGestureRecognizer>();
   private stateByHand: Record<string, HandGestureState> = {};
   private observedFrameCountByHand: Record<string, number> = {};
+  private lastObservedAtByHand: Record<string, number> = {};
 
   registerGesture<TResult, TState>(
     recognizer: GestureRecognizer<TResult, TState>,
@@ -71,11 +73,15 @@ export class GestureLibrary {
   evaluateHand(
     context: Omit<
       GestureRecognizerContext,
-      "observedFrameCount" | "hasStableHistory" | "recognizedGestures"
+      | "observedFrameCount"
+      | "hasStableHistory"
+      | "timeSincePreviousObservationMs"
+      | "recognizedGestures"
     >,
   ): Record<string, unknown> {
     const observedFrameCount =
       (this.observedFrameCountByHand[context.handId] ?? 0) + 1;
+    const previousObservationTime = this.lastObservedAtByHand[context.handId];
     this.observedFrameCountByHand[context.handId] = observedFrameCount;
 
     const result: Record<string, unknown> = {};
@@ -83,6 +89,10 @@ export class GestureLibrary {
       ...context,
       observedFrameCount,
       hasStableHistory: observedFrameCount >= 3,
+      timeSincePreviousObservationMs:
+        previousObservationTime === undefined
+          ? 0
+          : context.currentTimeMs - previousObservationTime,
       recognizedGestures: result,
     };
 
@@ -99,20 +109,31 @@ export class GestureLibrary {
       );
     });
 
+    this.lastObservedAtByHand[context.handId] = context.currentTimeMs;
+
     return result;
   }
 
-  pruneInactiveHands(activeHandIds: Set<string>): void {
+  pruneInactiveHands(
+    activeHandIds: Set<string>,
+    currentTimeMs = Infinity,
+    gracePeriodMs = 0,
+  ): void {
     Object.keys(this.stateByHand).forEach((handId) => {
       if (activeHandIds.has(handId)) return;
 
+      const lastSeen = this.lastObservedAtByHand[handId] ?? -Infinity;
+      if (currentTimeMs - lastSeen < Math.max(0, gracePeriodMs)) return;
+
       delete this.stateByHand[handId];
       delete this.observedFrameCountByHand[handId];
+      delete this.lastObservedAtByHand[handId];
     });
   }
 
   reset(): void {
     this.stateByHand = {};
     this.observedFrameCountByHand = {};
+    this.lastObservedAtByHand = {};
   }
 }

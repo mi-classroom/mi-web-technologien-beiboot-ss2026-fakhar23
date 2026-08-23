@@ -1,4 +1,5 @@
 import type * as handPoseDetection from "@tensorflow-models/hand-pose-detection";
+import { analyzeScreenFacingOpenPalm } from "../gestureUtils";
 import { getDistance3D, roundValue } from "../mathUtils";
 import type { TrackedHand, TrackedZoomGesture } from "../types";
 
@@ -7,6 +8,14 @@ export const DEFAULT_ZOOM_DEAD_ZONE = 0.08;
 const ZOOM_READY_HOLD_MS = 1000;
 const ZOOM_EXIT_PINCH_DISTANCE_THRESHOLD = 0.05;
 const ZOOM_EXIT_PINCH_HOLD_MS = 180;
+const ZOOM_OPEN_PALM_REQUIREMENTS = {
+  fingerExtensionRatio: 1.08,
+  longFingerAlignment: 0.35,
+  screenFacingRatio: 0.65,
+  minimumSeparatedFingerGaps: 1,
+  minimumTipSpread: 0.7,
+  minimumThumbSpread: 0.25,
+};
 
 interface ZoomModeState {
   openPalmStartTimeMs: number | null;
@@ -24,6 +33,10 @@ export interface ZoomGestureFrameInput {
   videoHeight: number;
   precision: number;
   deadZone?: number;
+}
+
+export interface ZoomModeControllerOptions {
+  readyHoldMs?: number;
 }
 
 export interface ZoomGestureFrameResult {
@@ -77,7 +90,10 @@ function hasZoomExitPinch(hand: handPoseDetection.Hand): boolean {
   );
 }
 
-export function createZoomModeController() {
+export function createZoomModeController(
+  options: ZoomModeControllerOptions = {},
+) {
+  const readyHoldMs = options.readyHoldMs ?? ZOOM_READY_HOLD_MS;
   let state = createInitialZoomState();
   let exitPinchStartTimeMs: number | null = null;
 
@@ -119,14 +135,22 @@ export function createZoomModeController() {
         exitPinchStartTimeMs !== null &&
         currentTimeMs - exitPinchStartTimeMs >= ZOOM_EXIT_PINCH_HOLD_MS;
 
-      const visiblePalmHands = estimatedHands
+      // Zoom requires two deliberate, screen-facing open palms. Merely having
+      // two tracked hands, including fists, must not start zoom mode.
+      const screenFacingOpenPalmHands = estimatedHands
         .map((hand, index) => ({
           formattedHand: formattedHands[index],
           palm: hand.keypoints[9],
+          isOpenPalm: analyzeScreenFacingOpenPalm(
+            hand.keypoints,
+            hand.keypoints3D,
+            ZOOM_OPEN_PALM_REQUIREMENTS,
+          ).active,
         }))
         .filter(
-          ({ formattedHand, palm }) =>
+          ({ formattedHand, isOpenPalm, palm }) =>
             formattedHand &&
+            isOpenPalm &&
             palm?.x !== null &&
             palm?.x !== undefined &&
             palm?.y !== null &&
@@ -134,10 +158,10 @@ export function createZoomModeController() {
             Number.isFinite(palm.x) &&
             Number.isFinite(palm.y),
         );
-      const zoomPair = visiblePalmHands.slice(0, 2);
+      const zoomPair = screenFacingOpenPalmHands.slice(0, 2);
       const firstPalm = zoomPair[0]?.palm;
       const secondPalm = zoomPair[1]?.palm;
-      const hasTwoVisiblePalms = zoomPair.length >= 2;
+      const hasTwoOpenPalms = zoomPair.length >= 2;
 
       // Navigation confirmation has priority: when pinky navigation is ready
       // and waiting for a pinch, a second hand must not accidentally arm zoom.
@@ -147,10 +171,10 @@ export function createZoomModeController() {
           hand.gestures.navigation.direction !== null &&
           hand.gestures.navigation.holdProgressMs >= 1000,
       );
-      const canArmZoom = hasTwoVisiblePalms && !navigationWaitingForPinch;
+      const canArmZoom = hasTwoOpenPalms && !navigationWaitingForPinch;
 
       const zoomDistance =
-        hasTwoVisiblePalms && firstPalm && secondPalm
+        hasTwoOpenPalms && firstPalm && secondPalm
           ? Math.hypot(
               (firstPalm.x! - secondPalm.x!) / videoWidth,
               (firstPalm.y! - secondPalm.y!) / videoHeight,
@@ -166,7 +190,7 @@ export function createZoomModeController() {
           state.openPalmStartTimeMs = currentTimeMs;
         }
 
-        if (currentTimeMs - state.openPalmStartTimeMs >= ZOOM_READY_HOLD_MS) {
+        if (currentTimeMs - state.openPalmStartTimeMs >= readyHoldMs) {
           state.ready = true;
           state.anchorDistance = zoomDistance;
           state.anchorScale = state.scale;
@@ -212,9 +236,9 @@ export function createZoomModeController() {
 
       const holdProgressMs =
         canArmZoom && state.openPalmStartTimeMs !== null && !state.ready
-          ? Math.min(currentTimeMs - state.openPalmStartTimeMs, ZOOM_READY_HOLD_MS)
+          ? Math.min(currentTimeMs - state.openPalmStartTimeMs, readyHoldMs)
           : state.ready
-            ? ZOOM_READY_HOLD_MS
+            ? readyHoldMs
             : 0;
       const mode = state.ready
         ? "ready"
@@ -224,12 +248,12 @@ export function createZoomModeController() {
       const zoomGesture: TrackedZoomGesture = {
         active: state.ready && direction !== null,
         mode,
-        waitingForPalms: !state.ready && !hasTwoVisiblePalms,
+        waitingForPalms: !state.ready && !hasTwoOpenPalms,
         ready: state.ready,
         entered: !wasReady && state.ready,
         exited: exitRequested && wasReady,
         holdProgressMs: Math.round(holdProgressMs),
-        palmCount: visiblePalmHands.length,
+        palmCount: screenFacingOpenPalmHands.length,
         direction,
         zoomIn: state.ready && direction === "in",
         zoomOut: state.ready && direction === "out",

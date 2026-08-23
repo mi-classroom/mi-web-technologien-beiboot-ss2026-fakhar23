@@ -65,21 +65,27 @@ recognizers have run.
 import { createDefaultGestureLibrary } from "../Core";
 
 const gestureLibrary = createDefaultGestureLibrary({
-  pinchCooldownMs: 350,
+  pinchDistanceThreshold: 0.06,
+  pinchClickHoldMs: 120,
+  scrollReadyHoldMs: 1000,
   scrollSpeedPx: 18,
-  scrollDeadZone: 0.08,
+  navigationHoldMs: 1000,
 });
 ```
 
-Options:
+All options are optional. If an option is not supplied, the gesture uses its
+own built-in default. `pinchCooldownMs` can also be set when the application
+needs a longer delay between virtual clicks.
 
-- `pinchCooldownMs`: minimum time between virtual click events.
-- `scrollSpeedPx`: pixels per detection frame while infinite scroll is active.
-- `scrollDeadZone`: normalized distance above/below the scroll anchor where no
-  scrolling happens.
+The multi-hand zoom mode is configured through `createHandTracker().start()`:
 
-`createHandTracker()` additionally accepts `zoomDeadZone` for the multi-hand
-zoom mode used by the demo.
+```ts
+tracker.start({
+  videoElement,
+  onData,
+  zoomReadyHoldMs: 1000,
+});
+```
 
 ### `new GestureLibrary()`
 
@@ -132,64 +138,6 @@ type GestureRecognizerContext = {
 
 The recognizer should return plain JSON-compatible data. The demo can then
 display it in debug mode or map it to UI behavior.
-
-### `evaluateHand(context)`
-
-Runs every registered recognizer for one hand and returns results keyed by
-gesture name.
-
-```ts
-const gestures = gestureLibrary.evaluateHand({
-  handId: "Left-0",
-  keypoints,
-  keypoints3D,
-  videoWidth: 640,
-  videoHeight: 480,
-  currentTimeMs: performance.now(),
-  precision: 3,
-});
-```
-
-Example result:
-
-```json
-{
-  "pinch": {
-    "active": false,
-    "click": false,
-    "distance": 0.084
-  },
-  "scroll": {
-    "active": true,
-    "direction": "down",
-    "down": true
-  },
-  "navigation": {
-    "active": false,
-    "direction": null
-  },
-  "zoom": {
-    "mode": "idle",
-    "scale": 1
-  }
-}
-```
-
-### `pruneInactiveHands(activeHandIds)`
-
-Removes state for hands that disappeared from the camera frame.
-
-```ts
-gestureLibrary.pruneInactiveHands(new Set(["Left-0"]));
-```
-
-### `reset()`
-
-Clears all per-hand recognizer state.
-
-```ts
-gestureLibrary.reset();
-```
 
 ### `getGestureEvents(hands)`
 
@@ -247,27 +195,25 @@ To avoid accidental scrolling, scroll has an explicit mode:
 2. The result changes from `mode: "arming"` to `mode: "ready"`.
 3. The palm position at that moment becomes the scroll anchor.
 4. After ready mode starts, the strict palm check is no longer required; the
-   palm center is tracked until pinch exits or the hand disappears.
+   palm center is tracked until the user pinches to exit or the hand disappears.
 5. Only in ready mode can vertical palm movement emit scroll events.
-6. Moving above the anchor plus dead zone starts continuous upward scrolling.
-7. Moving below the anchor plus dead zone starts continuous downward scrolling.
-8. Moving back into the dead zone stops scrolling.
-9. A pinch exits scroll mode and returns the application to normal gesture
-   handling.
+6. Moving above the anchor emits upward scrolling; moving below it emits
+   downward scrolling.
+7. A pinch, or moving the active hand out of frame, exits scroll mode and
+   returns the application to normal gesture handling.
 
 While scroll is arming or ready, navigation gestures are ignored by the default
 library so little-finger movement cannot accidentally trigger navigation.
 
 It emits:
 
-- `toTop`: continuous upward scroll state outside the upper dead zone
-- `down`: continuous downward scroll state outside the lower dead zone
+- `toTop`: continuous upward scroll state
+- `down`: continuous downward scroll state
 - `mode`: `idle`, `arming`, or `ready`
 - `entered`: one-frame event when scroll mode becomes ready
-- `exited`: one-frame event when pinch exits scroll mode
+- `exited`: one-frame event when a pinch exits scroll mode or the active hand leaves the frame
 - `holdProgressMs`: progress toward the one-second ready threshold
 - `anchorY`: normalized palm position where scroll mode became ready
-- `deadZone`: normalized no-scroll boundary around the anchor
 - `scrollSpeedPx`: configured scroll speed for app/UI behavior
 - `palmQuality`: diagnostic booleans for the strict palm gate
   (`fingersExtended`, `screenFacing`, `fingersSeparated`, `thumbSpread`)

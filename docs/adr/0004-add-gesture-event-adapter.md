@@ -1,40 +1,35 @@
-# ADR 0004: Add Gesture Event Adapter
+# ADR 0004: Provide an App-Friendly Gesture Event Adapter
 
 ## Status
 
 Accepted
 
-## Problem
+## Context
 
-The preview app used the public tracker API, but still had to inspect nested
-gesture state such as `hands[].gestures.navigation.forward`. That worked, but
-it was too low-level for an application that only wants virtual actions.
+The tracker exposes detailed hand data for debugging and advanced use. This is useful, but an application would otherwise have to repeatedly inspect nested properties such as `hands[].gestures.navigation.forward` or `hands[].gestures.scroll.down`.
+
+That makes normal application code verbose and risks inconsistent handling of one-frame actions, gesture priority, and duplicate events.
 
 ## Decision
 
-Add `getGestureEvents(hands)` to the public Core API.
-
-It converts tracked hand state into app-friendly events:
+Expose `getGestureEvents(hands)` as part of the public Core API. It converts the detailed tracker output into a short list of app-level events, including:
 
 - `click`
-- `scrollUp`
-- `scrollDown`
-- `navigateBack`
-- `navigateForward`
-- `zoomReady`
-- `zoomExit`
-- `zoomIn`
-- `zoomOut`
+- `scrollReady`, `scrollExit`, `scrollUp`, and `scrollDown`
+- `navigateBack` and `navigateForward`
+- `zoomReady`, `zoomExit`, `zoomIn`, and `zoomOut`
 
-## Alternatives Rejected
+Each event includes a readable detail message and, when useful, supporting values such as scroll speed or zoom scale. The original detailed hand state is still returned by the tracker and remains available for the debug UI.
 
-- Keep parsing `hands[].gestures` in every app: too repetitive and easy to get
-  wrong.
-- Put callbacks inside recognizers: rejected because recognizers should remain
-  UI-free and reusable.
+## Why this approach
+
+The adapter gives most consumers a simple interface: “what virtual actions happened in this frame?” Advanced consumers are not limited, because they can still inspect raw gesture state when they need anchors, distances, progress, or diagnostic values.
+
+This keeps callbacks out of recognizers and avoids making every application write its own incomplete event-conversion code.
 
 ## Consequences
 
-- The demo app can use a simpler public API.
-- Raw gesture state is still available for debugging.
-- The adapter is optional, so advanced apps can still read the full result.
+- UI code is shorter and expresses application behavior in terms of actions, rather than landmark-derived flags.
+- Gesture logic stays free of React and browser side effects.
+- Raw state remains available for telemetry, custom interfaces, and debugging.
+- The adapter must be updated when a new public event type is introduced; this is a deliberate, visible API decision rather than hidden application logic.

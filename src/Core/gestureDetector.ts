@@ -14,9 +14,12 @@ export type {
 export { GestureLibrary } from "./gestureLibrary";
 
 export interface DefaultGestureLibraryOptions {
+  navigationHoldMs?: number;
+  pinchClickHoldMs?: number;
   pinchCooldownMs?: number;
+  pinchDistanceThreshold?: number;
+  scrollReadyHoldMs?: number;
   scrollSpeedPx?: number;
-  scrollDeadZone?: number;
 }
 
 export function createDefaultGestureLibrary(
@@ -24,13 +27,17 @@ export function createDefaultGestureLibrary(
 ): GestureLibrary {
   return new GestureLibrary()
     .registerGesture(
-      createPinchGesture(options.pinchCooldownMs ?? DEFAULT_PINCH_COOLDOWN_MS),
+      createPinchGesture({
+        clickHoldMs: options.pinchClickHoldMs,
+        cooldownMs: options.pinchCooldownMs ?? DEFAULT_PINCH_COOLDOWN_MS,
+        distanceThreshold: options.pinchDistanceThreshold,
+      }),
     )
     .registerGesture(
       createPalmScrollGesture({
-        deadZone: options.scrollDeadZone,
+        readyHoldMs: options.scrollReadyHoldMs,
         scrollSpeedPx: options.scrollSpeedPx,
       }),
     )
-    .registerGesture(createPinkyNavigationGesture());
+    .registerGesture(createPinkyNavigationGesture(options.navigationHoldMs));
 }

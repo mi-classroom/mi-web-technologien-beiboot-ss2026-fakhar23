@@ -1,117 +1,126 @@
-# Sprint 4: Gesture Library
+# Gesture Model Studio
 
-# Sprint 4: Library Application Test
+Gesture Model Studio is a browser-based 3D model inspector controlled by a webcam gesture library. It combines hand tracking with familiar mouse and keyboard controls, so models remain usable when a camera is unavailable.
 
-## Goal
+The project is the **Vision Application** path for Issue #5. It demonstrates the library through a polished 3D inspection experience rather than a raw gesture test surface.
 
-Issue #4 asks us to use the gesture library as if it were an external
-dependency. The app should communicate with the library only through the public
-API and should reveal what is missing or awkward in that API.
+This repository is project work for the **Web Technologies** module (SS 2026).
 
-## Demo Application
+> **Live demo:** add the public deployment URL after deployment.
+>
+> **Video demo:** add the video URL after upload.
 
-Topic: **Accessible UI controls for a static page**
+## Features
 
-The existing preview mode is now used as the standalone demo application. It
-imports from the public API only:
+- Inspect built-in CSS models and uploaded `.glb` models.
+- Rotate with an open palm, mouse drag, or arrow keys.
+- Zoom with two hands, the mouse wheel, or `+` / `-`.
+- Cycle selectable model areas with pinch, click, or `Enter` / `Space`.
+- Switch models using pinky navigation, `A` / `D`, or the gallery.
+- Open Immersive view with `F`; exit with `Esc`.
+- Use Debug view to inspect the public hand-tracking result.
 
-```ts
-import { createHandTracker, getGestureEvents, type TrackedHand } from "../Core";
-```
+## Project rationale
 
-It does not import from internal files such as `src/Core/gestures/`,
-`gestureUtils`, or `gestureLibrary`.
+The existing library already supported rotate, zoom, selection, and navigation. A 3D inspector gives those capabilities a coherent purpose: users can see their hand, the resulting mode, and the model response in one place.
 
-## How To Start
+Path B (further library robustness work) was considered. Earlier work had already addressed gesture priority, accidental pinches, zoom persistence, and brief tracking dropouts, so Path A was the higher-value next step. See [ADR 0005](./docs/adr/0005-choose-vision-application.md).
+
+## Requirements
+
+- Node.js 20 or newer
+- pnpm 9 or newer
+- A modern browser with WebGL support and webcam permission for hand controls
+
+Mouse and keyboard controls work without a camera. Camera access requires `localhost` or HTTPS.
+
+## Run locally
 
 ```bash
 pnpm install
 pnpm run dev
 ```
 
-Open the app in the browser and use **Preview mode**. Debug mode can still be
-enabled to inspect raw tracking data.
+Open the local Vite URL shown in the terminal. To create a production build:
 
-## Gesture Controls In The Demo
-
-| User action   | Gesture                                                       | App behavior                                     |
-| ------------- | ------------------------------------------------------------- | ------------------------------------------------ |
-| Click         | Pinch thumb and index finger                                  | Increments the click counter                     |
-| Scroll        | Hold one open palm for one second, then move palm up/down     | Infinite scroll in the preview page              |
-| Exit scroll   | Pinch while in scroll mode                                    | Leaves scroll mode                               |
-| Next page     | Point pinky right for one second, then pinch with other hand  | Moves to the next letter page                    |
-| Previous page | Point pinky left for one second, then pinch with other hand   | Moves to the previous letter page                |
-| Zoom text     | Hold two hands for one second, then move hands apart/together | Resizes the preview text                         |
-| Exit zoom     | Short deliberate pinch while in zoom mode                     | Leaves zoom mode but keeps the current text size |
-
-The pages are labeled `A` through `Z`. Navigation wraps from `Z` back to `A`
-and from `A` back to `Z`.
-
-## API Problem Found
-
-The first version of the app used the public tracker result, but the app code
-still had to inspect nested low-level state:
-
-```ts
-hands[].gestures.navigation.forward
-hands[].gestures.scroll.down
-hands[].gestures.zoom.zoomIn
+```bash
+pnpm run build
+pnpm run preview
 ```
 
-This was technically public, but not ergonomic. A normal app wants virtual
-events such as `navigateForward`, `scrollDown`, or `click`, not detailed
-recognizer state.
+The build command type-checks the app and produces the static deployment bundle in `dist/`.
 
-## API Fix
+## Controls
 
-Added a public helper:
+| Action         | Hand gesture                                                    | Mouse / keyboard fallback   |
+| -------------- | --------------------------------------------------------------- | --------------------------- |
+| Rotate model   | Hold one open palm for one second, then move it                 | Drag / arrow keys           |
+| Zoom model     | Hold two hands for one second, then move them apart or together | Wheel / `+` / `-`           |
+| Select area    | Pinch in normal mode                                            | Click / `Enter` / `Space`   |
+| Change model   | Hold pinky left or right, then pinch with the other hand        | `A` / `D` / Gallery         |
+| Immersive view | —                                                               | `F` to enter, `Esc` to exit |
 
-```ts
-getGestureEvents(hands);
+## Models and selection
+
+The gallery includes two built-in models and models uploaded during the current browser session. Uploads must be self-contained binary `.glb` files. The viewer exposes mesh/node boundaries as selectable areas when the source model contains separate meshes. A single-mesh GLB is selected as a whole; this is a property of the source model, not a generated semantic hotspot.
+
+## Repository structure
+
+```txt
+src/
+  Core/                  reusable gesture library and public API
+    index.ts             supported import boundary
+  UI/                    React application and focused UI components
+    App.tsx              interaction orchestration
+    LiveCameraPanel.tsx  camera surface and telemetry states
+    ThreeModelViewer.tsx GLB loading, framing, selection, and thumbnails
+    uiDefinitions.ts     UI model data and event definitions
+docs/adr/                Architecture Decision Records
 ```
 
-This converts tracked hand data into simple event objects:
+## Library boundary
 
-- `click`
-- `scrollUp`
-- `scrollDown`
-- `navigateBack`
-- `navigateForward`
-- `zoomReady`
-- `zoomExit`
-- `zoomIn`
-- `zoomOut`
+The application consumes the gesture library only through the public API in [`src/Core/index.ts`](./src/Core/index.ts). It uses `createHandTracker()` and `getGestureEvents()` rather than importing recognizers or landmark helpers from internal files.
 
-The preview app now uses this helper for its main virtual actions.
+## Deploy
 
-Decision record: [`ADR 0004`](./adr/0004-add-gesture-event-adapter.md)
+This is a standard Vite application. Any static host can serve the output of `pnpm run build` from the generated `dist/` directory. For GitHub Pages, set the Vite `base` option to the repository path when necessary, build the app, and publish `dist/` with GitHub Pages or a Pages deployment workflow.
 
-## Other Improvements Made While Testing The App
+Use an HTTPS host for deployed camera access. After deploying, verify that the page can request camera permission and add the real URL below.
 
-- Improved the interactive preview into a clearer static-page demo.
-- Added A-Z page navigation with wraparound.
-- Added light background colors for each page letter.
-- Added sticky mode instructions inside the preview page:
-  - scroll mode explains palm up/down and pinch-to-exit
-  - zoom mode explains hand distance and pinch-to-exit
-  - pinky navigation explains pinch-to-confirm
-- Fixed zoom scale persistence:
-  - exiting zoom no longer resets preview zoom to `1.00`
-  - re-entering zoom starts from the current preview zoom level
-  - hands leaving and re-entering during zoom no longer reset zoom
-- Fixed the zoom number mismatch between the camera overlay and preview toolbar.
+- Public deployment URL: **add after deployment**
+- Demo video URL: **add after upload**
 
-## Acceptance Criteria Check
+## Troubleshooting
 
-| Criterion                                 | Status                                                  |
-| ----------------------------------------- | ------------------------------------------------------- |
-| Demo app is functional                    | Done: preview mode controls a static page with gestures |
-| Uses only public library API              | Done: app imports from `../Core`                        |
-| At least one API problem found and fixed  | Done: added `getGestureEvents(hands)`                   |
-| API change explained in a Decision Record | Done: ADR 0004                                          |
-| Application can be started locally        | Done: `pnpm run dev`                                    |
-| Application is checked into repository    | Done when committed                                     |
+- **No camera image:** check browser permission, another app using the camera, and that the page runs on `localhost` or HTTPS.
+- **Gestures are unreliable:** use even lighting, keep hands within the frame, and avoid fast motion blur. Mouse and keyboard alternatives are always available.
+- **The selected area says “Whole model”:** the uploaded GLB contains one mesh. Export separate meshes to expose independently selectable parts.
+- **A model does not load:** upload a self-contained `.glb`; the upload flow does not support `.gltf` files with external texture files.
 
-## Effort
+## Reflection
 
-Timebox / effort: **8-10 hours**.
+By using heuristic rules, the hand-tracking library can recognize many
+different gestures. These rules help compensate for image noise and small
+camera movements. Although a camera is not a perfect sensor, this makes
+gesture recognition reliable in everyday use.
+
+Multiple gestures that may overlap also work well overall. The biggest
+challenge was finding simple and clear rules that reliably distinguish between
+the gestures. Holding a gesture briefly before activating it helps prevent
+accidental actions, and visual feedback makes it easier to understand when a
+gesture has been recognized.
+
+The main trade-off is that stricter detection reduces false positives but can
+make gestures harder to trigger. Conventional keyboard and mouse controls
+provide a dependable fallback when hand tracking is temporarily unavailable.
+
+## Project documentation
+
+- [Gesture library API](./docs/gesture-library.md)
+- [Sprint 1: hand-tracking foundation](<./docs/readme(sprint%201).md>)
+- [Sprint 2: gesture vocabulary and pinch recognition](<./docs/readme(sprint%202).md>)
+- [Sprint 3: reusable gesture library](<./docs/readme(sprint%203).md>)
+- [Sprint 4: library application test](<./docs/readme(sprint%204).md>)
+- [Sprint 5: Vision Application](<./docs/readme(sprint%205).md>)
+- [Architecture Decision Records](./docs/adr/)

@@ -7,6 +7,12 @@ export const DEFAULT_PINCH_COOLDOWN_MS = 350;
 const PINCH_DISTANCE_THRESHOLD = 0.06;
 const PINCH_CLICK_HOLD_MS = 120;
 
+export interface PinchGestureOptions {
+  clickHoldMs?: number;
+  cooldownMs?: number;
+  distanceThreshold?: number;
+}
+
 interface PinchGestureState {
   previousQualifiedPinchActive: boolean;
   pinchStartTimeMs: number | null;
@@ -14,8 +20,13 @@ interface PinchGestureState {
 }
 
 export function createPinchGesture(
-  cooldownMs = DEFAULT_PINCH_COOLDOWN_MS,
+  options: PinchGestureOptions = {},
 ): GestureRecognizer<TrackedPinchGesture, PinchGestureState> {
+  const cooldownMs = options.cooldownMs ?? DEFAULT_PINCH_COOLDOWN_MS;
+  const distanceThreshold =
+    options.distanceThreshold ?? PINCH_DISTANCE_THRESHOLD;
+  const clickHoldMs = options.clickHoldMs ?? PINCH_CLICK_HOLD_MS;
+
   return {
     name: "pinch",
     createInitialState: () => ({
@@ -29,7 +40,7 @@ export function createPinchGesture(
         context.keypoints3D?.[8],
       );
       const active =
-        pinchDistance !== null && pinchDistance < PINCH_DISTANCE_THRESHOLD;
+        pinchDistance !== null && pinchDistance < distanceThreshold;
 
       if (active && state.pinchStartTimeMs === null) {
         state.pinchStartTimeMs = context.currentTimeMs;
@@ -43,11 +54,9 @@ export function createPinchGesture(
         active &&
         context.hasStableHistory &&
         state.pinchStartTimeMs !== null &&
-        context.currentTimeMs - state.pinchStartTimeMs >= PINCH_CLICK_HOLD_MS;
-      const started =
-        qualifiedActive && !state.previousQualifiedPinchActive;
-      const released =
-        !qualifiedActive && state.previousQualifiedPinchActive;
+        context.currentTimeMs - state.pinchStartTimeMs >= clickHoldMs;
+      const started = qualifiedActive && !state.previousQualifiedPinchActive;
+      const released = !qualifiedActive && state.previousQualifiedPinchActive;
       const click =
         started &&
         context.currentTimeMs - state.lastClickTimeMs >=

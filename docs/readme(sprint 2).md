@@ -38,3 +38,10 @@ Die Geste wird rein in einer Headless-Tracking-Engine (`tracker.ts`) mit folgend
 Aktuell verwenden wir standardmäßig das **"lite"**-Modell der ML-Bibliothek, um eine optimale, ruckelfreie Performance im Browser zu gewährleisten. Wenn die Anwendung jedoch auf leistungsstärkerer Hardware ausgeführt wird, kann die Erkennungsgenauigkeit (insbesondere auf Distanz und bei leichten Verdeckungen) drastisch verbessert werden, indem wir auf das **"full"**-Modell wechseln. Dies ist in der Architektur bereits vorbereitet:
 ```typescript
 async function initialize(modelType: "lite" | "full" = "lite") { ... }
+```
+
+---
+
+## Tatsächlicher Zeitaufwand
+
+**12 Stunden** für Gestenvokabular, Pinch-Erkennung, Tests und Dokumentation.

@@ -1,6 +1,7 @@
 export {
   DEFAULT_PINCH_COOLDOWN_MS,
   createPinchGesture,
+  type PinchGestureOptions,
 } from "./pinchGesture";
 export {
   createPalmScrollGesture,
@@ -10,4 +11,5 @@ export { createPinkyNavigationGesture } from "./pinkyNavigationGesture";
 export {
   DEFAULT_ZOOM_DEAD_ZONE,
   createZoomModeController,
+  type ZoomModeControllerOptions,
 } from "./zoomGesture";

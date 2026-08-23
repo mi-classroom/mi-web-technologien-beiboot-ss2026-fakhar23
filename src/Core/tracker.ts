@@ -13,6 +13,10 @@ import { formatCoordinate, roundValue } from "./mathUtils";
 import type { TrackerConfig, TrackedHand } from "./types";
 import type { GestureLibrary } from "./gestureLibrary";
 
+// MediaPipe can briefly miss a hand during quick motion. Keep recognizer state
+// long enough for that jitter to recover, but still release modes after a real exit.
+const HAND_TRACKING_GRACE_PERIOD_MS = 400;
+
 export type {
   GestureRecognizer,
   GestureRecognizerContext,
@@ -55,8 +59,11 @@ function muteScrollGesture(hand: TrackedHand): void {
     exited: false,
     holdProgressMs: 0,
     direction: null,
+    directionX: null,
     toTop: false,
     down: false,
+    left: false,
+    right: false,
   };
 }
 
@@ -67,7 +74,7 @@ export function createHandTracker() {
   let isRunning = false;
   let currentLoopId = 0;
   let gestureLibrary: GestureLibrary | null = null;
-  const zoomModeController = createZoomModeController();
+  let zoomModeController = createZoomModeController();
 
   // Loads the TensorFlow backend and compiles the MediaPipe ML model
   async function initialize(modelType: "lite" | "full" = "lite") {
@@ -94,8 +101,13 @@ export function createHandTracker() {
       normalize = true,
       precision = 4,
       pinchCooldownMs = DEFAULT_PINCH_COOLDOWN_MS,
+      pinchDistanceThreshold,
+      pinchClickHoldMs,
       scrollSpeedPx,
+      scrollReadyHoldMs,
+      navigationHoldMs,
       zoomDeadZone = DEFAULT_ZOOM_DEAD_ZONE,
+      zoomReadyHoldMs,
       gestureLibrary: configuredGestureLibrary,
     } = config;
 
@@ -103,10 +115,15 @@ export function createHandTracker() {
     gestureLibrary =
       configuredGestureLibrary ??
       createDefaultGestureLibrary({
+        navigationHoldMs,
+        pinchClickHoldMs,
         pinchCooldownMs,
+        pinchDistanceThreshold,
+        scrollReadyHoldMs,
         scrollSpeedPx,
       });
     gestureLibrary.reset();
+    zoomModeController = createZoomModeController({ readyHoldMs: zoomReadyHoldMs });
     zoomModeController.reset();
     currentLoopId++;
 
@@ -222,7 +239,11 @@ export function createHandTracker() {
           }
         }
 
-        activeGestureLibrary.pruneInactiveHands(activeHandIds);
+        activeGestureLibrary.pruneInactiveHands(
+          activeHandIds,
+          currentTimeMs,
+          HAND_TRACKING_GRACE_PERIOD_MS,
+        );
         onData(formattedHands);
       }
 

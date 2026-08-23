@@ -42,11 +42,14 @@ export interface TrackedScrollGesture {
   exited: boolean;
   holdProgressMs: number;
   direction: "up" | "down" | null;
+  directionX: "left" | "right" | null;
   toTop: boolean;
   down: boolean;
+  left: boolean;
+  right: boolean;
   scrollSpeedPx: number;
+  anchorX: number | null;
   anchorY: number | null;
-  deadZone: number;
   openPalm: boolean;
   palmQuality: {
     fingersExtended: boolean;
@@ -54,8 +57,11 @@ export interface TrackedScrollGesture {
     fingersSeparated: boolean;
     thumbSpread: boolean;
   };
+  x: number | null;
   y: number | null;
+  deltaX: number | null;
   deltaY: number | null;
+  movementX: number | null;
   movementY: number | null;
 }
 
@@ -109,7 +115,12 @@ export interface TrackerConfig {
   normalize?: boolean;
   precision?: number;
   pinchCooldownMs?: number;
+  pinchDistanceThreshold?: number;
+  pinchClickHoldMs?: number;
   scrollSpeedPx?: number;
+  scrollReadyHoldMs?: number;
+  navigationHoldMs?: number;
   zoomDeadZone?: number;
+  zoomReadyHoldMs?: number;
   gestureLibrary?: GestureLibrary;
 }

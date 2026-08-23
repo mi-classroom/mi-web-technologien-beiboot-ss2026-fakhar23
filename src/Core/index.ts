@@ -13,10 +13,7 @@ export {
   createZoomModeController,
 } from "./gestures";
 
-export type {
-  GestureEvent,
-  GestureEventKind,
-} from "./gestureEvents";
+export type { GestureEvent, GestureEventKind } from "./gestureEvents";
 export type {
   GestureRecognizer,
   GestureRecognizerContext,
@@ -32,4 +29,8 @@ export type {
   TrackedScrollGesture,
   TrackedZoomGesture,
 } from "./tracker";
-export type { PalmScrollGestureOptions } from "./gestures";
+export type {
+  PalmScrollGestureOptions,
+  PinchGestureOptions,
+  ZoomModeControllerOptions,
+} from "./gestures";

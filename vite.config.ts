@@ -23,6 +23,7 @@ export const VERSION = "0.4.1646424915";`;
 
 // https://vite.dev/config/
 export default defineConfig({
+  base: "/mi-web-technologien-beiboot-ss2026-fakhar23/",
   plugins: [react(), mediapipeShimPlugin()],
   optimizeDeps: {
     exclude: ["@mediapipe/hands"],

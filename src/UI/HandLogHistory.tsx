@@ -1,6 +1,7 @@
 import React, { useState } from "react";
+import type { TrackedHand } from "../Core";
 
-// Blueprint for a recorded snapshot log entry
+// One saved camera snapshot and its hand-tracking data.
 interface HandLogEntry {
   id: number;
   timestamp: string;
@@ -8,9 +9,9 @@ interface HandLogEntry {
   serializedData: string;
 }
 
-// Props needed from App.tsx to create and size snapshots
+// Camera data needed to create a snapshot.
 interface HandLogHistoryProps {
-  handsData: any[];
+  handsData: TrackedHand[];
   videoRef: React.RefObject<HTMLVideoElement | null>;
   canvasRef: React.RefObject<HTMLCanvasElement | null>;
   trackingWidth: number;
@@ -24,30 +25,30 @@ export default function HandLogHistory({
   trackingWidth,
   trackingHeight,
 }: HandLogHistoryProps) {
-  // The history state is now safely encapsulated inside this component
+  // Saved snapshots are kept only in this panel.
   const [logEntries, setLogEntries] = useState<HandLogEntry[]>([]);
 
-  // Combines the current video frame and skeleton graphics canvas into an image object
+  // Combines the camera image and hand skeleton into one snapshot.
   const triggerLogCapture = () => {
     if (!videoRef.current || !canvasRef.current) return;
 
-    // Create an isolated canvas buffer to stitch frames together
+    // Draw into a temporary canvas before saving the image.
     const captureCanvas = document.createElement("canvas");
     captureCanvas.width = trackingWidth;
     captureCanvas.height = trackingHeight;
     const ctx = captureCanvas.getContext("2d");
     if (!ctx) return;
 
-    // Mirror image the video drawing pass to match our visual webcam layout styling
+    // Mirror the camera image to match the on-screen camera view.
     ctx.translate(trackingWidth, 0);
     ctx.scale(-1, 1);
     ctx.drawImage(videoRef.current, 0, 0, trackingWidth, trackingHeight);
 
-    // Reset transformations completely before painting the vector graphics cleanly on top
+    // Reset the mirror before drawing the skeleton on top.
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.drawImage(canvasRef.current, 0, 0, trackingWidth, trackingHeight);
 
-    // Export layout states into a base64 string image asset and serialize tracking object data
+    // Save the image and the matching tracking data together.
     const mergedImageData = captureCanvas.toDataURL("image/png");
     const currentJson = JSON.stringify(handsData, null, 2);
 
@@ -58,7 +59,7 @@ export default function HandLogHistory({
       serializedData: currentJson,
     };
 
-    // Append the new entry to our localized component list state
+    // Add the new snapshot to this panel's list.
     setLogEntries((prev) => [...prev, newLog]);
   };
 
