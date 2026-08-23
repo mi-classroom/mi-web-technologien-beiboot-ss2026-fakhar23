@@ -2,6 +2,12 @@
 
 ## 1. Gestenvokabular & Abstraktion (Mapping-Tabelle)
 
+Die Tabelle dokumentiert das damals geplante Gestenvokabular. In diesem Sprint
+wurde zunächst nur die Pinch-Geste implementiert; Scroll-, Navigations- und
+Zoom-Gesten wurden in späteren Sprints ergänzt. Die Fern-Gesten waren eine
+Idee für mögliche Erweiterungen und sind keine aktuell verwendete
+Pose-Detection-Implementierung.
+
 > 💡 **Distanz-Strategie:** Für Entfernungen unter 1 Meter verwenden wir das Hand-Pose-Modell (`@tensorflow-models/hand-pose-detection`) zur Erkennung feiner Fingerbewegungen (Mikro-Gesten). Ab 1 Meter sinkt die Pixeldichte drastisch. Für diese Distanz würde für Makro-Bewegungen (ganze Arme) eine separate **Pose-Detection-Bibliothek** (Ganzkörper-Tracking) benötigt. 
 > *Ausnahme:* Für unseren Prototypen (Klicken) nutzen wir einen Exploit, der es uns erlaubt, das bestehende Hand-Modell auch aus der Distanz zweckzuentfremden, ohne eine zweite, rechenintensive Bibliothek laden zu müssen.
 
@@ -31,8 +37,8 @@ Für die prototypische Implementierung habe ich mich vollständig auf die **Pinc
 Die Geste wird rein in einer Headless-Tracking-Engine (`tracker.ts`) mit folgender Logik verarbeitet:
 
 * **Die Heuristik:** Die Engine berechnet für jeden aktiven Frame die **euklidische 3D-Distanz** zwischen den Landmarken der Daumen- und Zeigefingerspitze.
-* **Der Schwellenwert (Threshold):** Fällt die berechnete Distanz unter ein striktes variables Limit (`PINCH_RATIO_THRESHOLD`), setzt die Engine den Status auf `isPinching: true`.
-* **Kantenerkennung (Edge Detection):** Um zu unterscheiden, ob ein Nutzer einen Klick *initiiert* oder die Finger lediglich zusammenhält, vergleicht die Engine den aktuellen Frame mit dem vorherigen. Ein Klick-Ereignis wird nur genau in dem Frame registriert, in dem `isPinching` von `false` auf `true` wechselt.
+* **Der Schwellenwert (Threshold):** Fällt die berechnete 3D-Distanz unter das konfigurierbare Limit (`PINCH_DISTANCE_THRESHOLD`), wird `active: true` gemeldet.
+* **Kantenerkennung (Edge Detection):** Die Engine verfolgt den Beginn und das Ende eines Pinches. Nach einem kurzen stabilen Halt wird `click: true` als einmaliges Ereignis gemeldet; dadurch wird ein gehaltenes Pinch nicht in jedem Frame als neuer Klick ausgegeben.
 
 🚀 **Performance vs. Präzision (Lite vs. Full Modell):**
 Aktuell verwenden wir standardmäßig das **"lite"**-Modell der ML-Bibliothek, um eine optimale, ruckelfreie Performance im Browser zu gewährleisten. Wenn die Anwendung jedoch auf leistungsstärkerer Hardware ausgeführt wird, kann die Erkennungsgenauigkeit (insbesondere auf Distanz und bei leichten Verdeckungen) drastisch verbessert werden, indem wir auf das **"full"**-Modell wechseln. Dies ist in der Architektur bereits vorbereitet:

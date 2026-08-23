@@ -357,5 +357,3 @@ Acceptance criteria coverage:
 - New per-hand gestures can be registered with `GestureLibrary.registerGesture()`.
 - Public API usage is documented in this file.
 - Design decisions are documented in `docs/adr/`.
-
-Effort / timebox: **16 hours**.

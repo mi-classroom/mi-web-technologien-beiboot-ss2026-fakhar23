@@ -6,9 +6,10 @@ The project is the **Vision Application** path for Issue #5. It demonstrates the
 
 This repository is project work for the **Web Technologies** module (SS 2026).
 
-> **Live demo:** add the public deployment URL after deployment.
+> **Live demo:** [Gesture Model Studio](https://mi-classroom.github.io/mi-web-technologien-beiboot-ss2026-fakhar23/)
 >
-> **Video demo:** add the video URL after upload.
+> **Video demo:** `BeiBoot-Vid-Fakhar-23-08-2026.mp4` (uploaded to the
+> professor's submission folder).
 
 ## Features
 
@@ -86,10 +87,11 @@ The application consumes the gesture library only through the public API in [`sr
 
 This is a standard Vite application. Any static host can serve the output of `pnpm run build` from the generated `dist/` directory. For GitHub Pages, set the Vite `base` option to the repository path when necessary, build the app, and publish `dist/` with GitHub Pages or a Pages deployment workflow.
 
-Use an HTTPS host for deployed camera access. After deploying, verify that the page can request camera permission and add the real URL below.
+Use an HTTPS host for deployed camera access. The deployed GitHub Pages site is
+available at the link above.
 
-- Public deployment URL: **add after deployment**
-- Demo video URL: **add after upload**
+- Public deployment URL: https://mi-classroom.github.io/mi-web-technologien-beiboot-ss2026-fakhar23/
+- Demo video: `BeiBoot-Vid-Fakhar-23-08-2026.mp4` (professor's submission folder)
 
 ## Troubleshooting
 

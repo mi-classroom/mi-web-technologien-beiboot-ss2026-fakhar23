@@ -17,7 +17,7 @@ Für dieses PoC wurde `@tensorflow-models/hand-pose-detection` in Kombination mi
 **Warum diese Library?**
 
 - **Client-seitig:** Sie läuft vollständig lokal im Browser. Es wird kein Python-Backend benötigt.
-- **Performance:** Für die finale Evaluierung und die Screenshots wurde das `full`-Modell verwendet, welches höchste Präzision liefert und dennoch flüssig läuft. Wir haben das System alternativ auch erfolgreich mit dem `lite`-Modell getestet, welches sich als extrem ressourcenschonende Alternative für schwächere Hardware erwiesen hat.
+- **Performance:** Das `full`-Modell wurde für die Evaluierung getestet und liefert höhere Präzision. Für den normalen Betrieb verwendet die Anwendung standardmäßig das `lite`-Modell, weil es im Browser ressourcenschonender läuft. Beide Modellvarianten sind in der Core-Engine vorbereitet.
 - **Datenformat:** Die Library liefert direkt die exakten 21 Hand-Landmarks (Knöchel und Gelenke) im 3D-Raum sowie einen Confidence-Score.
 - **Keine Abstraktion:** Die Library liefert reine Rohdaten. Dadurch haben wir die volle Kontrolle darüber, wie die Daten formatiert, normalisiert und weiterverwendet werden.
 - **Erweiterbarkeit & Zukunftssicherheit:** Da das Kern-Tracking vollständig in einer headless `tracker.ts` Engine gekapselt ist, bleibt das Projekt flexibel. Das TensorFlow/MediaPipe-Ökosystem erlaubt es uns, in späteren Sprints problemlos weitere Modelle (z. B. für Face-Mesh oder Ganzkörper-Pose-Tracking) zu integrieren oder die extrahierten Koordinaten an ein nachgelagertes Klassifikations-Modell zur Gestenerkennung zu übergeben.
@@ -47,26 +47,26 @@ Um die Qualität der Rohdaten vernünftig bewerten zu können, wurde das Snapsho
 
 **Standard-Tracking:** Das Tracking funktioniert unter normalen Bedingungen einwandfrei.
 
-![Standard Tracking](./assets/docs/sprint1/standard-tracking.png)
+![Standard Tracking](../assets/docs/sprint1/standard-tracking.png)
 
 - **Rauschen & Jitter (Unzuverlässig):** Die reinen Pixelkoordinaten des Modells zittern permanent im Millisekunden-Takt, auch wenn die Hand komplett stillgehalten wird. Um das zu beheben, wurde ein „Decimal Precision“-Filter in die Core-Logik eingebaut. Wenn man die Werte normalisiert (0.0 bis 1.0) und zum Beispiel auf 3 Nachkommastellen kürzt, wird das Rauschen erfolgreich geglättet.
 - **Webcam-Spiegelung:** Kameras im Browser sind standardmäßig gespiegelt. Das Modell verwechselt linke und rechte Hände, wenn nicht explizit das Flag `flipHorizontal: true` übergeben wird.
 - **Räumliche Tiefe (Z-Achse):** Obwohl das Kamerabild nur 2D ist, berechnet das Modell die Tiefe (Z-Achse). Legt man beispielsweise die Fingerspitzen flach nach hinten, spiegelt sich diese Wölbung korrekt in den Tiefenwerten wider.
 
-![Depth Test](./assets/docs/sprint1/horizontal-depth-test.png)
+![Depth Test](../assets/docs/sprint1/horizontal-depth-test.png)
 
 - **Low-Light Performance (Stabil):** Das Modell ist extrem robust gegenüber schlechten Lichtverhältnissen. Selbst bei starkem Bildrauschen der Kamera und im Halbdunkel werden die Hände noch zuverlässig mit einem Score von >0.97 erkannt und sauber getrackt.
 
-![Low Light Test](./assets/docs/sprint1/low-light-performance.png)
+![Low Light Test](../assets/docs/sprint1/low-light-performance.png)
 
 - **Verdeckung & Occlusion (Limitierung):** Wenn sich zwei Hände stark überlappen oder eine Faust geballt wird, verliert das Modell an Präzision. Es versucht, die verdeckten Knöchel (z. B. die hinteren Finger einer Faust oder verdeckte Handflächen) zu „erraten“. Das führt zu leicht verschobenen Vektoren im Skeleton-Overlay.
 
-![Occlusion Test - Hand über Hand](./assets/docs/sprint1/hands-overlapping-occlusion.png)
-![Occlusion Test - Faust](./assets/docs/sprint1/fist-occlusion-test.png)
+![Occlusion Test - Hand über Hand](../assets/docs/sprint1/hands-overlapping-occlusion.png)
+![Occlusion Test - Faust](../assets/docs/sprint1/fist-occlusion-test.png)
 
 - **Multi-Hand Tracking:** Das Modell erkennt problemlos mehrere Hände gleichzeitig („Left“ und „Right“) und liefert saubere, isolierte Daten-Arrays für jede erkannte Hand.
 
-![Multi Hand Test](./assets/docs/sprint1/multi-hand-detection.png)
+![Multi Hand Test](../assets/docs/sprint1/multi-hand-detection.png)
 
 ## Projektaufwand
 

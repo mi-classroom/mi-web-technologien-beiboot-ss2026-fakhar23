@@ -24,10 +24,10 @@ Decision Record: [ADR 0005](./adr/0005-choose-vision-application.md).
 
 ## Nutzung der öffentlichen Bibliothek
 
-`src/UI/App.tsx` importiert nur aus `../Core`, dem öffentlichen Einstiegspunkt
-der Bibliothek. Die Anwendung verwendet `createHandTracker()` und
-`getGestureEvents()` und importiert keine Erkenner, Tracker-Interna oder
-Landmark-Hilfsfunktionen aus `src/Core`.
+Die UI verwendet die Bibliothek nur über `../Core`, den öffentlichen
+Einstiegspunkt der Bibliothek. `useCameraTracker.ts` erstellt den Tracker und
+`App.tsx` verarbeitet die öffentlichen Gesten-Events. Die Anwendung importiert
+keine Erkenner, Tracker-Interna oder Landmark-Hilfsfunktionen aus `src/Core`.
 
 ## Zentrale Entscheidung
 
@@ -50,19 +50,27 @@ Mit `pnpm run build` wird der Produktions-Build geprüft.
 - [x] Anwendung verwendet die Bibliothek über die öffentliche Core-API.
 - [x] README erklärt Installation, Steuerung und Deployment.
 - [x] Decision Records dokumentieren Weg und Interaktionsdesign.
-- [ ] Öffentliche Deployment-URL in der Root-README ergänzen.
-- [ ] Video von höchstens zehn Minuten aufnehmen, hochladen und URL in
-  Root-README und Miro Board eintragen.
-- [ ] Finale Änderungen in `main` committen und pushen.
+- [x] Öffentliche Deployment-URL in der Root-README ergänzen.
+- [x] Video von höchstens zehn Minuten aufgenommen und hochgeladen:
+  `BeiBoot-Vid-Fakhar-23-08-2026.mp4` (professor's submission folder).
+- [x] Finale Änderungen in `main` committen und pushen.
 
 ## Reflexion
 
-Die größte Stärke der Anwendung ist die direkte Verbindung zwischen Hand in
-der Kamera, erkanntem Modus und Reaktion des 3D-Modells. Die größte
-Herausforderung war, überlappende Gesten und unvollständiges Tracking in eine
-vorhersehbare Bedienung zu übersetzen. Gestenpriorität, ein kurzer Puffer bei
-Tracking-Aussetzern sowie Maus- und Tastaturalternativen machen die Interaktion
-verlässlicher.
+Heuristische Regeln ermöglichen es der Hand-Tracking-Library, viele
+verschiedene Gesten zu erkennen. Sie helfen dabei, Bildrauschen und kleine
+Kamerabewegungen auszugleichen. Obwohl eine Kamera kein perfekter Sensor ist,
+funktioniert die Gestenerkennung dadurch im Alltag zuverlässig.
+
+Auch Gesten, die sich überschneiden können, funktionieren insgesamt gut. Die
+größte Herausforderung war, einfache und klare Regeln zu finden, die zuverlässig
+zwischen den Gesten unterscheiden. Ein kurzer Halt vor der Aktivierung hilft,
+versehentliche Aktionen zu vermeiden. Visuelles Feedback zeigt außerdem, wann
+eine Geste erkannt wurde.
+
+Strengere Erkennung reduziert Fehlaktivierungen, kann Gesten aber schwieriger
+auslösbar machen. Maus- und Tastatursteuerung bieten deshalb eine zuverlässige
+Alternative, wenn das Hand-Tracking vorübergehend nicht verfügbar ist.
 
 ## Zeitaufwand
 
